@@ -149,6 +149,28 @@ class _MobileScreenState extends State<MobileScreen> {
                       ],
                     ),
                     const SizedBox(height: 12),
+                    // 提示信息
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.shade50,
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: Colors.orange.shade200),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.info_outline, size: 16, color: Colors.orange),
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              '请先在电脑上打开 LAN Clip，再点击搜索',
+                              style: TextStyle(color: Colors.orange, fontSize: 12),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
                     if (_devices.isEmpty)
                       const Text('点击搜索按钮发现局域网内的设备', style: TextStyle(color: Colors.grey))
                     else

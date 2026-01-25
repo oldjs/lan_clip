@@ -1,16 +1,69 @@
-# lan_clip
+# LAN Clip
 
-A new Flutter project.
+局域网剪切板同步工具 - 手机输入，电脑接收。
 
-## Getting Started
+## 功能特点
 
-This project is a starting point for a Flutter application.
+- 无需服务器，局域网内直接通信
+- 自动发现设备，无需手动输入 IP
+- 一键发送到电脑剪切板
+- Windows 支持最小化到系统托盘
 
-A few resources to get you started if this is your first Flutter project:
+## 下载安装
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+前往 [Releases](../../releases) 页面下载：
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+| 平台 | 文件 | 说明 |
+|------|------|------|
+| Android | `lan_clip_android.apk` | 手机端，用于输入和发送内容 |
+| Windows | `lan_clip_windows.zip` | 电脑端，接收内容到剪切板 |
+
+## 使用方法
+
+### 1. 启动电脑端
+
+解压 `lan_clip_windows.zip`，运行 `lan_clip.exe`。
+
+程序启动后会显示本机 IP 和服务状态，此时已准备好接收内容。
+
+> 关闭窗口会最小化到系统托盘，右键托盘图标可退出程序。
+
+### 2. 启动手机端
+
+安装 `lan_clip_android.apk`，打开应用。
+
+### 3. 搜索设备
+
+确保手机和电脑在同一个 WiFi 网络下，点击「搜索」按钮。
+
+发现设备后会自动选中，你也可以手动选择目标设备。
+
+### 4. 发送内容
+
+在输入框中输入要发送的内容，点击「发送到电脑」按钮。
+
+电脑端会自动接收并复制到剪切板，可直接粘贴使用。
+
+## 常见问题
+
+### 搜索不到设备？
+
+1. 确认手机和电脑在同一个局域网（连接同一个 WiFi）
+2. 确认电脑端程序已启动且显示「服务运行中」
+3. 检查电脑防火墙是否阻止了程序（允许 UDP 9999 和 TCP 8888 端口）
+
+### 发送失败？
+
+1. 检查网络连接是否正常
+2. 尝试重新搜索设备
+3. 确认电脑端程序仍在运行
+
+## 技术原理
+
+- **设备发现**：UDP 广播 (端口 9999)
+- **内容传输**：TCP 连接 (端口 8888)
+- **无需服务器**：所有通信在局域网内完成
+
+## 开源协议
+
+MIT License

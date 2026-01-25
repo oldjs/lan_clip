@@ -23,6 +23,7 @@ class _DesktopScreenState extends State<DesktopScreen>
   String _localIp = '获取中...';
   int _tcpPort = SocketService.defaultPort;
   bool _isRunning = false;
+  bool _showHistory = false;  // 默认关闭历史记录
   final List<_ReceivedMessage> _messages = [];
   
   StreamSubscription<String>? _messageSubscription;
@@ -234,48 +235,69 @@ class _DesktopScreenState extends State<DesktopScreen>
             ),
             const SizedBox(height: 16),
             
-            // 接收历史
-            const Text(
-              '接收历史',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            // 接收历史标题栏
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  '接收历史',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+                Row(
+                  children: [
+                    if (_messages.isNotEmpty)
+                      TextButton(
+                        onPressed: () {
+                          setState(() => _messages.clear());
+                        },
+                        child: const Text('清空'),
+                      ),
+                    Switch(
+                      value: _showHistory,
+                      onChanged: (v) => setState(() => _showHistory = v),
+                    ),
+                  ],
+                ),
+              ],
             ),
             const SizedBox(height: 8),
-            Expanded(
-              child: Card(
-                child: _messages.isEmpty
-                    ? const Center(
-                        child: Text(
-                          '等待接收内容...\n手机端发送后会自动复制到剪切板',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(color: Colors.grey),
+            if (_showHistory)
+              Expanded(
+                child: Card(
+                  child: _messages.isEmpty
+                      ? const Center(
+                          child: Text(
+                            '暂无记录',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(color: Colors.grey),
+                          ),
+                        )
+                      : ListView.separated(
+                          padding: const EdgeInsets.all(8),
+                          itemCount: _messages.length,
+                          separatorBuilder: (_, _) => const Divider(height: 1),
+                          itemBuilder: (context, index) {
+                            final msg = _messages[index];
+                            return ListTile(
+                              title: Text(
+                                msg.content,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              subtitle: Text(_formatTime(msg.time)),
+                              trailing: IconButton(
+                                icon: const Icon(Icons.copy),
+                                onPressed: () async {
+                                  await ClipboardService.copy(msg.content);
+                                  _showSnackBar('已复制');
+                                },
+                              ),
+                              onTap: () => _showMessageDetail(msg),
+                            );
+                          },
                         ),
-                      )
-                    : ListView.separated(
-                        padding: const EdgeInsets.all(8),
-                        itemCount: _messages.length,
-                        separatorBuilder: (_, _) => const Divider(height: 1),
-                        itemBuilder: (context, index) {
-                          final msg = _messages[index];
-                          return ListTile(
-                            title: Text(
-                              msg.content,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            subtitle: Text(_formatTime(msg.time)),
-                            trailing: IconButton(
-                              icon: const Icon(Icons.copy),
-                              onPressed: () async {
-                                await ClipboardService.copy(msg.content);
-                                _showSnackBar('已复制');
-                              },
-                            ),
-                            onTap: () => _showMessageDetail(msg),
-                          );
-                        },
-                      ),
+                ),
               ),
-            ),
           ],
         ),
       ),
