@@ -1,9 +1,14 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/device.dart';
 import '../services/discovery_service.dart';
 import '../services/socket_service.dart';
 import '../services/auth_service.dart';
+
+// 自动发送设置的存储键
+const String _autoSendEnabledKey = 'auto_send_enabled';
+const String _autoSendDelayKey = 'auto_send_delay';
 
 /// 手机端界面 - 输入内容并发送到电脑
 class MobileScreen extends StatefulWidget {
@@ -28,10 +33,19 @@ class _MobileScreenState extends State<MobileScreen> {
   final Map<String, String> _devicePasswords = {};
   
   StreamSubscription<Device>? _deviceSubscription;
+  
+  // 自动发送相关状态
+  bool _autoSendEnabled = false;
+  int _autoSendDelay = 3; // 默认3秒
+  Timer? _autoSendTimer;
+  int _countdownSeconds = 0; // 倒计时剩余秒数
+  Timer? _countdownTimer; // 倒计时显示定时器
 
   @override
   void initState() {
     super.initState();
+    _loadAutoSendSettings();
+    
     _deviceSubscription = _discoveryService.deviceStream.listen((device) {
       setState(() {
         // 避免重复添加
@@ -43,19 +57,90 @@ class _MobileScreenState extends State<MobileScreen> {
       });
     });
     
+    // 监听输入变化，触发自动发送计时
+    _textController.addListener(_onTextChanged);
+    
     // 启动后自动搜索一次设备
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _searchDevices();
     });
   }
+  
+  /// 加载自动发送设置
+  Future<void> _loadAutoSendSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _autoSendEnabled = prefs.getBool(_autoSendEnabledKey) ?? false;
+      _autoSendDelay = prefs.getInt(_autoSendDelayKey) ?? 3;
+    });
+  }
+  
+  /// 保存自动发送设置
+  Future<void> _saveAutoSendSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_autoSendEnabledKey, _autoSendEnabled);
+    await prefs.setInt(_autoSendDelayKey, _autoSendDelay);
+  }
 
   @override
   void dispose() {
+    _textController.removeListener(_onTextChanged);
     _textController.dispose();
     _deviceSubscription?.cancel();
     _discoveryService.dispose();
     _socketService.dispose();
+    _cancelAutoSendTimer();
     super.dispose();
+  }
+  
+  /// 输入变化时的回调
+  void _onTextChanged() {
+    if (!_autoSendEnabled) return;
+    
+    // 取消之前的计时器
+    _cancelAutoSendTimer();
+    
+    final content = _textController.text.trim();
+    // 内容为空或没有选择设备，不启动计时
+    if (content.isEmpty || _selectedDevice == null || _isSending) {
+      return;
+    }
+    
+    // 启动倒计时
+    _countdownSeconds = _autoSendDelay;
+    setState(() {});
+    
+    // 每秒更新倒计时显示
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      setState(() {
+        _countdownSeconds--;
+      });
+      if (_countdownSeconds <= 0) {
+        timer.cancel();
+      }
+    });
+    
+    // 延迟后发送
+    _autoSendTimer = Timer(Duration(seconds: _autoSendDelay), () {
+      _countdownTimer?.cancel();
+      setState(() {
+        _countdownSeconds = 0;
+      });
+      _sendContent();
+    });
+  }
+  
+  /// 取消自动发送计时器
+  void _cancelAutoSendTimer() {
+    _autoSendTimer?.cancel();
+    _autoSendTimer = null;
+    _countdownTimer?.cancel();
+    _countdownTimer = null;
+    if (_countdownSeconds > 0) {
+      setState(() {
+        _countdownSeconds = 0;
+      });
+    }
   }
 
   /// 搜索设备
@@ -271,7 +356,64 @@ class _MobileScreenState extends State<MobileScreen> {
                 ),
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
+            
+            // 自动发送设置
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                child: Column(
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('停止输入后自动发送'),
+                        Switch(
+                          value: _autoSendEnabled,
+                          onChanged: (value) {
+                            setState(() {
+                              _autoSendEnabled = value;
+                              if (!value) {
+                                _cancelAutoSendTimer();
+                              }
+                            });
+                            _saveAutoSendSettings();
+                          },
+                        ),
+                      ],
+                    ),
+                    // 延迟时间设置（仅在启用时显示）
+                    if (_autoSendEnabled) ...[
+                      Row(
+                        children: [
+                          const Text('延迟时间: '),
+                          Expanded(
+                            child: Slider(
+                              value: _autoSendDelay.toDouble(),
+                              min: 1,
+                              max: 10,
+                              divisions: 9,
+                              label: '$_autoSendDelay 秒',
+                              onChanged: (value) {
+                                setState(() {
+                                  _autoSendDelay = value.round();
+                                });
+                                _cancelAutoSendTimer();
+                              },
+                              onChangeEnd: (value) {
+                                _saveAutoSendSettings();
+                              },
+                            ),
+                          ),
+                          Text('$_autoSendDelay 秒'),
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
             
             // 输入区域
             Expanded(
@@ -293,16 +435,48 @@ class _MobileScreenState extends State<MobileScreen> {
             ),
             const SizedBox(height: 16),
             
-            // 状态信息
-            if (_statusMessage.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8.0),
-                child: Text(
-                  _statusMessage,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.grey[600]),
-                ),
-              ),
+            // 状态信息（倒计时或普通状态）
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8.0),
+              child: _countdownSeconds > 0
+                  ? Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            value: _countdownSeconds / _autoSendDelay,
+                            color: Colors.blue,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          '$_countdownSeconds 秒后自动发送...',
+                          style: const TextStyle(color: Colors.blue),
+                        ),
+                        const SizedBox(width: 8),
+                        GestureDetector(
+                          onTap: _cancelAutoSendTimer,
+                          child: const Text(
+                            '取消',
+                            style: TextStyle(
+                              color: Colors.red,
+                              decoration: TextDecoration.underline,
+                            ),
+                          ),
+                        ),
+                      ],
+                    )
+                  : _statusMessage.isNotEmpty
+                      ? Text(
+                          _statusMessage,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: Colors.grey[600]),
+                        )
+                      : const SizedBox.shrink(),
+            ),
             
             // 发送按钮
             SizedBox(
