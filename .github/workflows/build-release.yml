@@ -7,10 +7,6 @@ on:
         description: 'Release version (e.g., v1.0.0)'
         required: true
         default: 'v1.0.0'
-      create_tag:
-        description: 'Create git tag for this version'
-        type: boolean
-        default: true
 
 jobs:
   build-android:
@@ -30,7 +26,6 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.24.0'
           channel: 'stable'
 
       - name: Get dependencies
@@ -59,7 +54,6 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.24.0'
           channel: 'stable'
 
       - name: Get dependencies
