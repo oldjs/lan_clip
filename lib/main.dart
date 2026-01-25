@@ -3,11 +3,15 @@ import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:launch_at_startup/launch_at_startup.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'screens/mobile_screen.dart';
 import 'screens/desktop_screen.dart';
 
 // 是否为开机自启
 bool isAutoStart = false;
+
+// 启动时隐藏设置的存储键
+const String startHiddenKey = 'start_hidden';
 
 void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -25,6 +29,10 @@ void main(List<String> args) async {
       args: ['--autostart'],  // 自启时传递参数
     );
     
+    // 读取用户设置：启动时是否隐藏到托盘
+    final prefs = await SharedPreferences.getInstance();
+    final startHidden = prefs.getBool(startHiddenKey) ?? false;
+    
     // 窗口管理初始化
     await windowManager.ensureInitialized();
     
@@ -37,11 +45,10 @@ void main(List<String> args) async {
     );
     
     await windowManager.waitUntilReadyToShow(windowOptions, () async {
-      if (isAutoStart) {
-        // 开机自启时直接隐藏到托盘
+      // 根据用户设置决定是否隐藏窗口
+      if (startHidden) {
         await windowManager.hide();
       } else {
-        // 手动启动时显示窗口
         await windowManager.show();
         await windowManager.focus();
       }

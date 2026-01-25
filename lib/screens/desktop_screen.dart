@@ -9,6 +9,7 @@ import '../services/discovery_service.dart';
 import '../services/socket_service.dart';
 import '../services/clipboard_service.dart';
 import '../services/auth_service.dart';
+import '../main.dart' show startHiddenKey;
 
 /// 电脑端界面 - 接收内容并写入剪切板
 class DesktopScreen extends StatefulWidget {
@@ -30,6 +31,7 @@ class _DesktopScreenState extends State<DesktopScreen>
   bool _autoPaste = false;    // 自动粘贴功能，默认关闭
   bool _passwordEnabled = false;  // 密码保护功能
   bool _launchAtStartup = false;  // 开机自启功能
+  bool _startHidden = false;      // 启动时隐藏到托盘
   final List<_ReceivedMessage> _messages = [];
   
   StreamSubscription<AuthResult>? _messageSubscription;
@@ -64,6 +66,7 @@ class _DesktopScreenState extends State<DesktopScreen>
     
     setState(() {
       _autoPaste = prefs.getBool(_autoPasteKey) ?? false;
+      _startHidden = prefs.getBool(startHiddenKey) ?? false;
       _passwordEnabled = passwordEnabled;
       _launchAtStartup = startupEnabled;
     });
@@ -91,6 +94,14 @@ class _DesktopScreenState extends State<DesktopScreen>
     } catch (e) {
       _showSnackBar('设置失败: $e');
     }
+  }
+
+  /// 设置启动时隐藏到托盘
+  Future<void> _setStartHidden(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(startHiddenKey, value);
+    setState(() => _startHidden = value);
+    _showSnackBar(value ? '下次启动将自动隐藏到托盘' : '下次启动将显示窗口');
   }
 
   @override
@@ -384,7 +395,7 @@ class _DesktopScreenState extends State<DesktopScreen>
                                 children: [
                                   Text('开机自启', style: TextStyle(fontWeight: FontWeight.w500)),
                                   Text(
-                                    '开机后自动启动并最小化到托盘',
+                                    '开机后自动启动程序',
                                     style: TextStyle(color: Colors.grey, fontSize: 12),
                                   ),
                                 ],
@@ -393,6 +404,32 @@ class _DesktopScreenState extends State<DesktopScreen>
                             Switch(
                               value: _launchAtStartup,
                               onChanged: _setLaunchAtStartup,
+                            ),
+                          ],
+                        ),
+                      ),
+                    // 启动时隐藏到托盘设置 (仅 Windows)
+                    if (Platform.isWindows)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('启动时隐藏', style: TextStyle(fontWeight: FontWeight.w500)),
+                                  Text(
+                                    '启动后自动最小化到系统托盘',
+                                    style: TextStyle(color: Colors.grey, fontSize: 12),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Switch(
+                              value: _startHidden,
+                              onChanged: _setStartHidden,
                             ),
                           ],
                         ),
