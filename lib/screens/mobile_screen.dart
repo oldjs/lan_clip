@@ -6,6 +6,7 @@ import '../services/discovery_service.dart';
 import '../services/socket_service.dart';
 import '../services/auth_service.dart';
 import '../services/clipboard_service.dart' show cmdBackspace, cmdSpace, cmdClear, cmdEnter, cmdArrowUp, cmdArrowDown, cmdArrowLeft, cmdArrowRight;
+import 'touchpad_screen.dart';
 
 // 自动发送设置的存储键
 const String _autoSendEnabledKey = 'auto_send_enabled';
@@ -338,6 +339,25 @@ class _MobileScreenState extends State<MobileScreen> {
     );
   }
   
+  /// 打开触摸板页面
+  void _openTouchpad() {
+    if (_selectedDevice == null) return;
+    
+    // 获取当前设备的密码哈希
+    final deviceKey = '${_selectedDevice!.ip}:${_selectedDevice!.port}';
+    final passwordHash = _devicePasswords[deviceKey];
+    
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => TouchpadScreen(
+          device: _selectedDevice!,
+          passwordHash: passwordHash,
+        ),
+      ),
+    );
+  }
+  
   /// 构建方向键按钮
   Widget _buildArrowButton(IconData icon, String command, String label) {
     return SizedBox(
@@ -362,6 +382,14 @@ class _MobileScreenState extends State<MobileScreen> {
       appBar: AppBar(
         title: const Text('LAN Clip - 发送端'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+        actions: [
+          // 触摸板入口按钮
+          IconButton(
+            icon: const Icon(Icons.touch_app),
+            tooltip: '触摸板',
+            onPressed: _selectedDevice == null ? null : _openTouchpad,
+          ),
+        ],
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),

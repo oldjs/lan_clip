@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:keypress_simulator/keypress_simulator.dart';
+import 'mouse_service.dart';
 
 // 控制指令前缀
 const String cmdPrefix = 'CMD:';
@@ -13,6 +14,14 @@ const String cmdArrowDown = '${cmdPrefix}ARROW_DOWN';
 const String cmdArrowLeft = '${cmdPrefix}ARROW_LEFT';
 const String cmdArrowRight = '${cmdPrefix}ARROW_RIGHT';
 
+// 鼠标控制指令
+const String cmdMouseMove = '${cmdPrefix}MOUSE_MOVE';
+const String cmdMouseLeftClick = '${cmdPrefix}MOUSE_LEFT_CLICK';
+const String cmdMouseRightClick = '${cmdPrefix}MOUSE_RIGHT_CLICK';
+const String cmdMouseLeftDown = '${cmdPrefix}MOUSE_LEFT_DOWN';
+const String cmdMouseLeftUp = '${cmdPrefix}MOUSE_LEFT_UP';
+const String cmdMouseScroll = '${cmdPrefix}MOUSE_SCROLL';
+
 /// 剪切板服务
 class ClipboardService {
   /// 判断是否为控制指令
@@ -23,6 +32,14 @@ class ClipboardService {
   /// 执行控制指令，返回操作描述
   static Future<String?> executeCommand(String command) async {
     if (!Platform.isWindows) return null;
+    
+    // 处理带参数的鼠标指令
+    if (command.startsWith(cmdMouseMove)) {
+      return _handleMouseMove(command);
+    }
+    if (command.startsWith(cmdMouseScroll)) {
+      return _handleMouseScroll(command);
+    }
     
     switch (command) {
       case cmdBackspace:
@@ -49,9 +66,43 @@ class ClipboardService {
       case cmdArrowRight:
         await simulateArrow(PhysicalKeyboardKey.arrowRight);
         return '右移';
+      // 鼠标控制指令
+      case cmdMouseLeftClick:
+        MouseService().leftClick();
+        return null; // 鼠标操作不显示提示
+      case cmdMouseRightClick:
+        MouseService().rightClick();
+        return null;
+      case cmdMouseLeftDown:
+        MouseService().leftDown();
+        return null;
+      case cmdMouseLeftUp:
+        MouseService().leftUp();
+        return null;
       default:
         return null;
     }
+  }
+  
+  /// 处理鼠标移动指令: CMD:MOUSE_MOVE:dx:dy
+  static String? _handleMouseMove(String command) {
+    final parts = command.split(':');
+    if (parts.length >= 4) {
+      final dx = int.tryParse(parts[2]) ?? 0;
+      final dy = int.tryParse(parts[3]) ?? 0;
+      MouseService().move(dx, dy);
+    }
+    return null;
+  }
+  
+  /// 处理滚轮指令: CMD:MOUSE_SCROLL:delta
+  static String? _handleMouseScroll(String command) {
+    final parts = command.split(':');
+    if (parts.length >= 3) {
+      final delta = int.tryParse(parts[2]) ?? 0;
+      MouseService().scroll(delta);
+    }
+    return null;
   }
   
   /// 模拟退格键
