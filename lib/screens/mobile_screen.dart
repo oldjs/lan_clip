@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/device.dart';
 import '../services/discovery_service.dart';
 import '../services/socket_service.dart';
+import '../services/auth_service.dart';
 
 /// 手机端界面 - 输入内容并发送到电脑
 class MobileScreen extends StatefulWidget {
@@ -22,6 +23,9 @@ class _MobileScreenState extends State<MobileScreen> {
   bool _isSearching = false;
   bool _isSending = false;
   String _statusMessage = '';
+  
+  // 存储设备对应的密码哈希（用户输入后缓存）
+  final Map<String, String> _devicePasswords = {};
   
   StreamSubscription<Device>? _deviceSubscription;
 
@@ -82,28 +86,98 @@ class _MobileScreenState extends State<MobileScreen> {
       return;
     }
 
+    // 如果设备需要密码，先检查是否已有缓存的密码
+    String? passwordHash;
+    if (_selectedDevice!.requiresPassword) {
+      final deviceKey = '${_selectedDevice!.ip}:${_selectedDevice!.port}';
+      passwordHash = _devicePasswords[deviceKey];
+      
+      // 没有缓存密码，需要用户输入
+      if (passwordHash == null) {
+        final password = await _showPasswordDialog();
+        if (password == null) {
+          return; // 用户取消
+        }
+        passwordHash = AuthService.hashPassword(password);
+        _devicePasswords[deviceKey] = passwordHash; // 缓存密码哈希
+      }
+    }
+
     setState(() {
       _isSending = true;
       _statusMessage = '正在发送...';
     });
 
-    final success = await _socketService.sendMessage(
+    final result = await _socketService.sendMessage(
       _selectedDevice!.ip,
       _selectedDevice!.port,
       content,
+      passwordHash: passwordHash,
     );
 
     setState(() {
       _isSending = false;
-      _statusMessage = success ? '发送成功' : '发送失败';
+      _statusMessage = result.success ? '发送成功' : '发送失败';
     });
 
-    if (success) {
+    if (result.success) {
       _textController.clear();
       _showSnackBar('已发送到 ${_selectedDevice!.name}');
     } else {
-      _showSnackBar('发送失败，请检查网络连接');
+      // 如果是密码错误，清除缓存的密码
+      if (_selectedDevice!.requiresPassword) {
+        final deviceKey = '${_selectedDevice!.ip}:${_selectedDevice!.port}';
+        _devicePasswords.remove(deviceKey);
+      }
+      _showSnackBar('发送失败: ${result.error ?? "请检查网络连接"}');
     }
+  }
+  
+  /// 显示密码输入对话框
+  Future<String?> _showPasswordDialog() async {
+    final controller = TextEditingController();
+    return showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('输入连接密码'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              '该设备需要密码才能连接',
+              style: TextStyle(color: Colors.grey, fontSize: 12),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: controller,
+              obscureText: true,
+              decoration: const InputDecoration(
+                labelText: '密码',
+                border: OutlineInputBorder(),
+                hintText: '请输入密码',
+              ),
+              autofocus: true,
+              onSubmitted: (value) {
+                Navigator.pop(context, value.trim());
+              },
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () {
+              final password = controller.text.trim();
+              Navigator.pop(context, password.isEmpty ? null : password);
+            },
+            child: const Text('确定'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showSnackBar(String message) {

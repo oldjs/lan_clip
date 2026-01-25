@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../services/discovery_service.dart';
 import '../services/socket_service.dart';
 import '../services/clipboard_service.dart';
+import '../services/auth_service.dart';
 
 /// 电脑端界面 - 接收内容并写入剪切板
 class DesktopScreen extends StatefulWidget {
@@ -26,9 +27,10 @@ class _DesktopScreenState extends State<DesktopScreen>
   bool _isRunning = false;
   bool _showHistory = false;  // 默认关闭历史记录
   bool _autoPaste = false;    // 自动粘贴功能，默认关闭
+  bool _passwordEnabled = false;  // 密码保护功能
   final List<_ReceivedMessage> _messages = [];
   
-  StreamSubscription<String>? _messageSubscription;
+  StreamSubscription<AuthResult>? _messageSubscription;
   
   // 设置项的存储键
   static const String _autoPasteKey = 'auto_paste_enabled';
@@ -50,8 +52,10 @@ class _DesktopScreenState extends State<DesktopScreen>
   /// 加载设置
   Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
+    final passwordEnabled = await AuthService.isPasswordEnabled();
     setState(() {
       _autoPaste = prefs.getBool(_autoPasteKey) ?? false;
+      _passwordEnabled = passwordEnabled;
     });
   }
 
@@ -105,16 +109,26 @@ class _DesktopScreenState extends State<DesktopScreen>
   /// 启动服务器
   Future<void> _startServer() async {
     try {
+      // 配置密码验证
+      _socketService.setPasswordVerification(
+        requiresPassword: _passwordEnabled,
+        verifyPassword: AuthService.verifyHash,
+      );
+      
       // 启动 TCP 服务器
       _tcpPort = await _socketService.startServer();
       
       // 启动 UDP 发现监听
       final deviceName = Platform.localHostname;
-      await _discoveryService.startListening(deviceName, _tcpPort);
+      await _discoveryService.startListening(
+        deviceName, 
+        _tcpPort,
+        requiresPassword: _passwordEnabled,
+      );
       
       // 监听接收的消息
-      _messageSubscription = _socketService.messageStream.listen((message) {
-        _onMessageReceived(message);
+      _messageSubscription = _socketService.messageStream.listen((result) {
+        _onAuthResult(result);
       });
 
       setState(() => _isRunning = true);
@@ -125,6 +139,94 @@ class _DesktopScreenState extends State<DesktopScreen>
       }
     } catch (e) {
       _showSnackBar('服务启动失败: $e');
+    }
+  }
+  
+  /// 设置密码保护
+  Future<void> _setPasswordEnabled(bool value) async {
+    if (value) {
+      // 启用密码，弹出设置对话框
+      final password = await _showSetPasswordDialog();
+      if (password != null && password.isNotEmpty) {
+        await AuthService.setPassword(password);
+        setState(() => _passwordEnabled = true);
+        _updatePasswordSettings();
+        _showSnackBar('密码已设置');
+      }
+    } else {
+      // 关闭密码
+      await AuthService.clearPassword();
+      setState(() => _passwordEnabled = false);
+      _updatePasswordSettings();
+      _showSnackBar('密码保护已关闭');
+    }
+  }
+  
+  /// 更新密码相关设置到服务
+  void _updatePasswordSettings() {
+    _socketService.setPasswordVerification(
+      requiresPassword: _passwordEnabled,
+      verifyPassword: AuthService.verifyHash,
+    );
+    _discoveryService.setRequiresPassword(_passwordEnabled);
+  }
+  
+  /// 显示设置密码对话框
+  Future<String?> _showSetPasswordDialog() async {
+    final controller = TextEditingController();
+    return showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('设置连接密码'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              '设置后，手机连接时需要输入此密码',
+              style: TextStyle(color: Colors.grey, fontSize: 12),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: controller,
+              obscureText: true,
+              decoration: const InputDecoration(
+                labelText: '密码',
+                border: OutlineInputBorder(),
+                hintText: '请输入密码',
+              ),
+              autofocus: true,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () {
+              final password = controller.text.trim();
+              if (password.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('密码不能为空')),
+                );
+                return;
+              }
+              Navigator.pop(context, password);
+            },
+            child: const Text('确定'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 处理认证结果
+  void _onAuthResult(AuthResult result) {
+    if (result.success && result.message != null) {
+      _onMessageReceived(result.message!);
+    } else if (!result.success) {
+      _showSnackBar('连接被拒绝: ${result.error ?? "密码错误"}');
     }
   }
 
@@ -242,6 +344,34 @@ class _DesktopScreenState extends State<DesktopScreen>
                     _buildInfoRow('发现端口 (UDP)', '9999'),
                     _buildInfoRow('通信端口 (TCP)', '$_tcpPort'),
                     const SizedBox(height: 8),
+                    // 密码保护设置
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text('密码保护', style: TextStyle(fontWeight: FontWeight.w500)),
+                                Text(
+                                  _passwordEnabled ? '已启用，手机连接需要密码' : '未启用，任何人都可连接',
+                                  style: TextStyle(
+                                    color: _passwordEnabled ? Colors.green : Colors.grey, 
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Switch(
+                            value: _passwordEnabled,
+                            onChanged: _setPasswordEnabled,
+                          ),
+                        ],
+                      ),
+                    ),
                     // 自动粘贴设置
                     if (Platform.isWindows)
                       Padding(

@@ -47,6 +47,9 @@ dependencies:
   
   # 持久化设置
   shared_preferences: ^2.3.5
+  
+  # 密码哈希
+  crypto: ^3.0.3
 
 dev_dependencies:
   flutter_test:

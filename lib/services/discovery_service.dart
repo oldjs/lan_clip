@@ -13,6 +13,7 @@ class DiscoveryService {
   final _deviceController = StreamController<Device>.broadcast();
   String _deviceName = 'Unknown';
   int _tcpPort = 8888;
+  bool _requiresPassword = false;  // 是否需要密码验证
   
   /// 发现的设备流
   Stream<Device> get deviceStream => _deviceController.stream;
@@ -35,10 +36,16 @@ class DiscoveryService {
     return null;
   }
 
+  /// 设置是否需要密码
+  void setRequiresPassword(bool value) {
+    _requiresPassword = value;
+  }
+
   /// 启动 UDP 监听（服务端模式 - Windows）
-  Future<void> startListening(String deviceName, int tcpPort) async {
+  Future<void> startListening(String deviceName, int tcpPort, {bool requiresPassword = false}) async {
     _deviceName = deviceName;
     _tcpPort = tcpPort;
+    _requiresPassword = requiresPassword;
     
     _socket?.close();
     _socket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, discoveryPort);
@@ -49,8 +56,9 @@ class DiscoveryService {
         if (datagram != null) {
           final message = utf8.decode(datagram.data);
           if (message == discoveryMessage) {
-            // 回复发现请求
-            final response = 'LAN_CLIP|$_deviceName|$_tcpPort';
+            // 回复发现请求，包含密码标志
+            final passwordFlag = _requiresPassword ? '1' : '0';
+            final response = 'LAN_CLIP|$_deviceName|$_tcpPort|$passwordFlag';
             _socket!.send(
               utf8.encode(response),
               datagram.address,
