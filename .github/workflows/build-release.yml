@@ -7,6 +7,11 @@ on:
         description: 'Release version (e.g., v1.0.0)'
         required: true
         default: 'v1.0.0'
+      changelog:
+        description: 'Changelog (use | for multiple lines)'
+        required: false
+        type: string
+        default: ''
 
 jobs:
   build-android:
@@ -106,7 +111,12 @@ jobs:
           tag_name: ${{ github.event.inputs.version }}
           name: LAN Clip ${{ github.event.inputs.version }}
           body: |
-            ## LAN Clip - 局域网剪切板同步工具
+            ## LAN Clip ${{ github.event.inputs.version }}
+            
+            ### 更新内容
+            ${{ github.event.inputs.changelog || '- 常规更新' }}
+            
+            ---
             
             ### 下载说明
             - **Android 手机**: 下载 `lan_clip_android.apk` 安装
