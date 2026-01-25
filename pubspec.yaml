@@ -41,6 +41,12 @@ dependencies:
   # Windows 托盘和窗口管理
   tray_manager: ^0.2.3
   window_manager: ^0.4.3
+  
+  # 模拟键盘输入（自动粘贴功能）
+  keypress_simulator: ^0.2.0
+  
+  # 持久化设置
+  shared_preferences: ^2.3.5
 
 dev_dependencies:
   flutter_test:

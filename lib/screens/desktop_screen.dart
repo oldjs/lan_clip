@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/discovery_service.dart';
 import '../services/socket_service.dart';
 import '../services/clipboard_service.dart';
@@ -24,16 +25,36 @@ class _DesktopScreenState extends State<DesktopScreen>
   int _tcpPort = SocketService.defaultPort;
   bool _isRunning = false;
   bool _showHistory = false;  // 默认关闭历史记录
+  bool _autoPaste = false;    // 自动粘贴功能，默认关闭
   final List<_ReceivedMessage> _messages = [];
   
   StreamSubscription<String>? _messageSubscription;
+  
+  // 设置项的存储键
+  static const String _autoPasteKey = 'auto_paste_enabled';
 
   @override
   void initState() {
     super.initState();
+    _loadSettings();
     _initServices();
     _initTray();
     windowManager.addListener(this);
+  }
+
+  /// 加载设置
+  Future<void> _loadSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _autoPaste = prefs.getBool(_autoPasteKey) ?? false;
+    });
+  }
+
+  /// 保存自动粘贴设置
+  Future<void> _setAutoPaste(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_autoPasteKey, value);
+    setState(() => _autoPaste = value);
   }
 
   @override
@@ -119,7 +140,13 @@ class _DesktopScreenState extends State<DesktopScreen>
       }
     });
 
-    _showSnackBar('已复制到剪切板');
+    // 自动粘贴功能
+    if (_autoPaste) {
+      final success = await ClipboardService.simulatePaste();
+      _showSnackBar(success ? '已自动粘贴' : '已复制到剪切板');
+    } else {
+      _showSnackBar('已复制到剪切板');
+    }
   }
 
   void _showSnackBar(String message) {
@@ -210,6 +237,32 @@ class _DesktopScreenState extends State<DesktopScreen>
                     _buildInfoRow('发现端口 (UDP)', '9999'),
                     _buildInfoRow('通信端口 (TCP)', '$_tcpPort'),
                     const SizedBox(height: 8),
+                    // 自动粘贴设置
+                    if (Platform.isWindows)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('自动粘贴', style: TextStyle(fontWeight: FontWeight.w500)),
+                                  Text(
+                                    '收到内容后自动在光标位置粘贴',
+                                    style: TextStyle(color: Colors.grey, fontSize: 12),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Switch(
+                              value: _autoPaste,
+                              onChanged: _setAutoPaste,
+                            ),
+                          ],
+                        ),
+                      ),
                     Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
