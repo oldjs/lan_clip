@@ -89,7 +89,7 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "com.example" "\0"
+            VALUE "CompanyName", "lanclip" "\0"
             VALUE "FileDescription", "LAN Clip - 局域网剪切板同步" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
             VALUE "InternalName", "LAN Clip" "\0"

@@ -36,10 +36,15 @@ class _DesktopScreenState extends State<DesktopScreen>
   @override
   void initState() {
     super.initState();
-    _loadSettings();
-    _initServices();
-    _initTray();
+    _initialize();
     windowManager.addListener(this);
+  }
+
+  /// 按顺序初始化：先加载设置，再启动服务
+  Future<void> _initialize() async {
+    await _loadSettings();
+    await _initServices();
+    _initTray();
   }
 
   /// 加载设置
