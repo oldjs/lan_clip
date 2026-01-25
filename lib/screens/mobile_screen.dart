@@ -42,6 +42,11 @@ class _MobileScreenState extends State<MobileScreen> {
         _selectedDevice ??= device;
       });
     });
+    
+    // 启动后自动搜索一次设备
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _searchDevices();
+    });
   }
 
   @override

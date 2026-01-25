@@ -1,14 +1,31 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
+import 'package:launch_at_startup/launch_at_startup.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'screens/mobile_screen.dart';
 import 'screens/desktop_screen.dart';
 
-void main() async {
+// 是否为开机自启
+bool isAutoStart = false;
+
+void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
   
-  // Windows 窗口管理初始化
+  // 检查是否为开机自启 (通过命令行参数)
+  isAutoStart = args.contains('--autostart');
+  
+  // Windows 平台初始化
   if (Platform.isWindows) {
+    // 初始化 launch_at_startup
+    final packageInfo = await PackageInfo.fromPlatform();
+    launchAtStartup.setup(
+      appName: packageInfo.appName,
+      appPath: Platform.resolvedExecutable,
+      args: ['--autostart'],  // 自启时传递参数
+    );
+    
+    // 窗口管理初始化
     await windowManager.ensureInitialized();
     
     const windowOptions = WindowOptions(
@@ -20,8 +37,14 @@ void main() async {
     );
     
     await windowManager.waitUntilReadyToShow(windowOptions, () async {
-      await windowManager.show();
-      await windowManager.focus();
+      if (isAutoStart) {
+        // 开机自启时直接隐藏到托盘
+        await windowManager.hide();
+      } else {
+        // 手动启动时显示窗口
+        await windowManager.show();
+        await windowManager.focus();
+      }
     });
   }
   

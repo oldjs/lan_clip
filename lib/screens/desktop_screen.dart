@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:launch_at_startup/launch_at_startup.dart';
 import '../services/discovery_service.dart';
 import '../services/socket_service.dart';
 import '../services/clipboard_service.dart';
@@ -28,6 +29,7 @@ class _DesktopScreenState extends State<DesktopScreen>
   bool _showHistory = false;  // 默认关闭历史记录
   bool _autoPaste = false;    // 自动粘贴功能，默认关闭
   bool _passwordEnabled = false;  // 密码保护功能
+  bool _launchAtStartup = false;  // 开机自启功能
   final List<_ReceivedMessage> _messages = [];
   
   StreamSubscription<AuthResult>? _messageSubscription;
@@ -53,9 +55,17 @@ class _DesktopScreenState extends State<DesktopScreen>
   Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
     final passwordEnabled = await AuthService.isPasswordEnabled();
+    
+    // 加载开机自启状态
+    bool startupEnabled = false;
+    if (Platform.isWindows) {
+      startupEnabled = await launchAtStartup.isEnabled();
+    }
+    
     setState(() {
       _autoPaste = prefs.getBool(_autoPasteKey) ?? false;
       _passwordEnabled = passwordEnabled;
+      _launchAtStartup = startupEnabled;
     });
   }
 
@@ -64,6 +74,23 @@ class _DesktopScreenState extends State<DesktopScreen>
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_autoPasteKey, value);
     setState(() => _autoPaste = value);
+  }
+  
+  /// 设置开机自启
+  Future<void> _setLaunchAtStartup(bool value) async {
+    if (!Platform.isWindows) return;
+    
+    try {
+      if (value) {
+        await launchAtStartup.enable();
+      } else {
+        await launchAtStartup.disable();
+      }
+      setState(() => _launchAtStartup = value);
+      _showSnackBar(value ? '已启用开机自启' : '已关闭开机自启');
+    } catch (e) {
+      _showSnackBar('设置失败: $e');
+    }
   }
 
   @override
@@ -344,6 +371,32 @@ class _DesktopScreenState extends State<DesktopScreen>
                     _buildInfoRow('发现端口 (UDP)', '9999'),
                     _buildInfoRow('通信端口 (TCP)', '$_tcpPort'),
                     const SizedBox(height: 8),
+                    // 开机自启设置 (仅 Windows)
+                    if (Platform.isWindows)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('开机自启', style: TextStyle(fontWeight: FontWeight.w500)),
+                                  Text(
+                                    '开机后自动启动并最小化到托盘',
+                                    style: TextStyle(color: Colors.grey, fontSize: 12),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Switch(
+                              value: _launchAtStartup,
+                              onChanged: _setLaunchAtStartup,
+                            ),
+                          ],
+                        ),
+                      ),
                     // 密码保护设置
                     Padding(
                       padding: const EdgeInsets.only(bottom: 8),
