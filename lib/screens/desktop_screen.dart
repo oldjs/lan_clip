@@ -270,6 +270,15 @@ class _DesktopScreenState extends State<DesktopScreen>
 
   /// 处理接收到的消息
   Future<void> _onMessageReceived(String message) async {
+    // 检查是否为控制指令
+    if (ClipboardService.isCommand(message)) {
+      final result = await ClipboardService.executeCommand(message);
+      if (result != null) {
+        _showSnackBar('已执行: $result');
+      }
+      return;
+    }
+    
     // 写入剪切板
     await ClipboardService.copy(message);
     

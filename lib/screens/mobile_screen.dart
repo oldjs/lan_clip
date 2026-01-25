@@ -5,6 +5,7 @@ import '../models/device.dart';
 import '../services/discovery_service.dart';
 import '../services/socket_service.dart';
 import '../services/auth_service.dart';
+import '../services/clipboard_service.dart' show cmdBackspace, cmdSpace, cmdClear, cmdEnter, cmdArrowUp, cmdArrowDown, cmdArrowLeft, cmdArrowRight;
 
 // 自动发送设置的存储键
 const String _autoSendEnabledKey = 'auto_send_enabled';
@@ -275,6 +276,85 @@ class _MobileScreenState extends State<MobileScreen> {
       SnackBar(content: Text(message), duration: const Duration(seconds: 2)),
     );
   }
+  
+  /// 发送控制指令到电脑
+  Future<void> _sendCommand(String command, String label) async {
+    if (_selectedDevice == null) {
+      _showSnackBar('请先选择目标设备');
+      return;
+    }
+    
+    // 取消自动发送计时器
+    _cancelAutoSendTimer();
+    
+    // 获取密码（如果需要）
+    String? passwordHash;
+    if (_selectedDevice!.requiresPassword) {
+      final deviceKey = '${_selectedDevice!.ip}:${_selectedDevice!.port}';
+      passwordHash = _devicePasswords[deviceKey];
+      if (passwordHash == null) {
+        final password = await _showPasswordDialog();
+        if (password == null) return;
+        passwordHash = AuthService.hashPassword(password);
+        _devicePasswords[deviceKey] = passwordHash;
+      }
+    }
+    
+    final result = await _socketService.sendMessage(
+      _selectedDevice!.ip,
+      _selectedDevice!.port,
+      command,
+      passwordHash: passwordHash,
+    );
+    
+    if (result.success) {
+      _showSnackBar('已发送: $label');
+    } else {
+      _showSnackBar('发送失败');
+    }
+  }
+  
+  /// 构建快捷操作按钮
+  Widget _buildCommandButton({
+    required IconData icon,
+    required String label,
+    required String command,
+    Color? color,
+  }) {
+    return OutlinedButton(
+      onPressed: _selectedDevice == null ? null : () => _sendCommand(command, label),
+      style: OutlinedButton.styleFrom(
+        foregroundColor: color,
+        padding: const EdgeInsets.symmetric(vertical: 10),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 18),
+          const SizedBox(height: 2),
+          Text(label, style: const TextStyle(fontSize: 11)),
+        ],
+      ),
+    );
+  }
+  
+  /// 构建方向键按钮
+  Widget _buildArrowButton(IconData icon, String command, String label) {
+    return SizedBox(
+      width: 48,
+      height: 48,
+      child: OutlinedButton(
+        onPressed: _selectedDevice == null ? null : () => _sendCommand(command, label),
+        style: OutlinedButton.styleFrom(
+          padding: EdgeInsets.zero,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+        ),
+        child: Icon(icon, size: 24),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -433,7 +513,65 @@ class _MobileScreenState extends State<MobileScreen> {
                 ),
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
+            
+            // 快捷操作按钮 - 第一行
+            Row(
+              children: [
+                Expanded(
+                  child: _buildCommandButton(
+                    icon: Icons.backspace_outlined,
+                    label: '退格',
+                    command: cmdBackspace,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: _buildCommandButton(
+                    icon: Icons.space_bar,
+                    label: '空格',
+                    command: cmdSpace,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: _buildCommandButton(
+                    icon: Icons.keyboard_return,
+                    label: '回车',
+                    command: cmdEnter,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: _buildCommandButton(
+                    icon: Icons.clear_all,
+                    label: '清空',
+                    command: cmdClear,
+                    color: Colors.red,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            
+            // 快捷操作按钮 - 方向键
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _buildArrowButton(Icons.keyboard_arrow_left, cmdArrowLeft, '左'),
+                const SizedBox(width: 4),
+                Column(
+                  children: [
+                    _buildArrowButton(Icons.keyboard_arrow_up, cmdArrowUp, '上'),
+                    const SizedBox(height: 4),
+                    _buildArrowButton(Icons.keyboard_arrow_down, cmdArrowDown, '下'),
+                  ],
+                ),
+                const SizedBox(width: 4),
+                _buildArrowButton(Icons.keyboard_arrow_right, cmdArrowRight, '右'),
+              ],
+            ),
+            const SizedBox(height: 12),
             
             // 状态信息（倒计时或普通状态）
             Padding(
