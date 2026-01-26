@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:launch_at_startup/launch_at_startup.dart';
+
 import '../models/device.dart';
 import '../models/clipboard_data.dart';
 import '../services/discovery_service.dart';
@@ -12,7 +12,8 @@ import '../services/socket_service.dart';
 import '../services/clipboard_service.dart';
 import '../services/clipboard_watcher_service.dart';
 import '../services/auth_service.dart';
-import '../main.dart' show startHiddenKey;
+
+import 'settings_screen.dart';
 
 /// 电脑端界面 - 接收内容并写入剪切板
 class DesktopScreen extends StatefulWidget {
@@ -34,8 +35,7 @@ class _DesktopScreenState extends State<DesktopScreen>
   bool _showHistory = false;  // 默认关闭历史记录
   bool _autoPaste = false;    // 自动粘贴功能，默认关闭
   bool _passwordEnabled = false;  // 密码保护功能
-  bool _launchAtStartup = false;  // 开机自启功能
-  bool _startHidden = false;      // 启动时隐藏到托盘
+
   bool _syncToMobile = false;     // 同步剪贴板到手机
   final List<_ReceivedMessage> _messages = [];
   final List<Device> _connectedDevices = []; // 已连接的手机设备
@@ -68,49 +68,11 @@ class _DesktopScreenState extends State<DesktopScreen>
     final prefs = await SharedPreferences.getInstance();
     final passwordEnabled = await AuthService.isPasswordEnabled();
     
-    // 加载开机自启状态
-    bool startupEnabled = false;
-    if (Platform.isWindows) {
-      startupEnabled = await launchAtStartup.isEnabled();
-    }
-    
     setState(() {
       _autoPaste = prefs.getBool(_autoPasteKey) ?? false;
-      _startHidden = prefs.getBool(startHiddenKey) ?? false;
       _syncToMobile = prefs.getBool(_syncToMobileKey) ?? false;
       _passwordEnabled = passwordEnabled;
-      _launchAtStartup = startupEnabled;
     });
-  }
-
-  /// 保存自动粘贴设置
-  Future<void> _setAutoPaste(bool value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_autoPasteKey, value);
-    setState(() => _autoPaste = value);
-  }
-  
-  /// 设置开机自启
-  Future<void> _setLaunchAtStartup(bool value) async {
-    if (!Platform.isWindows) return;
-    
-    try {
-      if (value) {
-        await launchAtStartup.enable();
-      } else {
-        await launchAtStartup.disable();
-      }
-      setState(() => _launchAtStartup = value);
-    } catch (e) {
-      _showSnackBar('设置失败: $e');
-    }
-  }
-
-  /// 设置启动时隐藏到托盘
-  Future<void> _setStartHidden(bool value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(startHiddenKey, value);
-    setState(() => _startHidden = value);
   }
 
   @override
@@ -221,24 +183,6 @@ class _DesktopScreenState extends State<DesktopScreen>
     });
   }
   
-  /// 设置密码保护
-  Future<void> _setPasswordEnabled(bool value) async {
-    if (value) {
-      // 启用密码，弹出设置对话框
-      final password = await _showSetPasswordDialog();
-      if (password != null && password.isNotEmpty) {
-        await AuthService.setPassword(password);
-        setState(() => _passwordEnabled = true);
-        _updatePasswordSettings();
-      }
-    } else {
-      // 关闭密码
-      await AuthService.clearPassword();
-      setState(() => _passwordEnabled = false);
-      _updatePasswordSettings();
-    }
-  }
-  
   /// 更新密码相关设置到服务
   void _updatePasswordSettings() {
     _socketService.setPasswordVerification(
@@ -248,56 +192,6 @@ class _DesktopScreenState extends State<DesktopScreen>
     _discoveryService.setRequiresPassword(_passwordEnabled);
   }
   
-  /// 显示设置密码对话框
-  Future<String?> _showSetPasswordDialog() async {
-    final controller = TextEditingController();
-    return showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('设置连接密码'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              '设置后，手机连接时需要输入此密码',
-              style: TextStyle(color: Colors.grey, fontSize: 12),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: controller,
-              obscureText: true,
-              decoration: const InputDecoration(
-                labelText: '密码',
-                border: OutlineInputBorder(),
-                hintText: '请输入密码',
-              ),
-              autofocus: true,
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('取消'),
-          ),
-          TextButton(
-            onPressed: () {
-              final password = controller.text.trim();
-              if (password.isEmpty) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('密码不能为空')),
-                );
-                return;
-              }
-              Navigator.pop(context, password);
-            },
-            child: const Text('确定'),
-          ),
-        ],
-      ),
-    );
-  }
-
   /// 处理认证结果
   void _onAuthResult(AuthResult result) {
     if (result.success && result.message != null) {
@@ -375,18 +269,30 @@ class _DesktopScreenState extends State<DesktopScreen>
     // 同步完成，不显示提示
   }
   
-  /// 设置同步到手机开关
-  Future<void> _setSyncToMobile(bool value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_syncToMobileKey, value);
-    
-    setState(() => _syncToMobile = value);
-    
-    if (value) {
-      await _clipboardWatcher.startWatching();
-    } else {
-      await _clipboardWatcher.stopWatching();
-    }
+  /// 打开设置页面
+  void _openSettings() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => SettingsScreen(
+          callbacks: SettingsCallbacks(
+            onAutoPasteChanged: (value) => setState(() => _autoPaste = value),
+            onSyncToMobileChanged: (value) {
+              setState(() => _syncToMobile = value);
+              if (value) {
+                _clipboardWatcher.startWatching();
+              } else {
+                _clipboardWatcher.stopWatching();
+              }
+            },
+            onPasswordChanged: (value) {
+              setState(() => _passwordEnabled = value);
+              _updatePasswordSettings();
+            },
+          ),
+        ),
+      ),
+    );
   }
 
   // ========== 托盘事件 ==========
@@ -432,6 +338,12 @@ class _DesktopScreenState extends State<DesktopScreen>
         title: const Text('LAN Clip - 接收端'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         actions: [
+          // 设置入口
+          IconButton(
+            icon: const Icon(Icons.settings),
+            tooltip: '设置',
+            onPressed: _openSettings,
+          ),
           // 最小化到托盘按钮
           if (Platform.isWindows)
             IconButton(
@@ -471,143 +383,6 @@ class _DesktopScreenState extends State<DesktopScreen>
                     _buildInfoRow('发现端口 (UDP)', '9999'),
                     _buildInfoRow('通信端口 (TCP)', '$_tcpPort'),
                     const SizedBox(height: 8),
-                    // 开机自启设置 (仅 Windows)
-                    if (Platform.isWindows)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            const Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text('开机自启'),
-                                  Text(
-                                    '开机后自动启动程序',
-                                    style: TextStyle(color: Colors.grey, fontSize: 12),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Switch(
-                              value: _launchAtStartup,
-                              onChanged: _setLaunchAtStartup,
-                            ),
-                          ],
-                        ),
-                      ),
-                    // 启动时隐藏到托盘设置 (仅 Windows)
-                    if (Platform.isWindows)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            const Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text('启动时隐藏'),
-                                  Text(
-                                    '启动后自动最小化到系统托盘',
-                                    style: TextStyle(color: Colors.grey, fontSize: 12),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Switch(
-                              value: _startHidden,
-                              onChanged: _setStartHidden,
-                            ),
-                          ],
-                        ),
-                      ),
-                    // 密码保护设置
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text('密码保护'),
-                                Text(
-                                  _passwordEnabled ? '已启用，手机连接需要密码' : '未启用，任何人都可连接',
-                                  style: TextStyle(
-                                    color: _passwordEnabled ? Colors.green : Colors.grey, 
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          Switch(
-                            value: _passwordEnabled,
-                            onChanged: _setPasswordEnabled,
-                          ),
-                        ],
-                      ),
-                    ),
-                    // 自动粘贴设置
-                    if (Platform.isWindows)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            const Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text('自动粘贴'),
-                                  Text(
-                                    '收到内容后自动在光标位置粘贴',
-                                    style: TextStyle(color: Colors.grey, fontSize: 12),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Switch(
-                              value: _autoPaste,
-                              onChanged: _setAutoPaste,
-                            ),
-                          ],
-                        ),
-                      ),
-                    // 同步剪贴板到手机设置
-                    if (Platform.isWindows)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text('同步到手机'),
-                                  Text(
-                                    _syncToMobile 
-                                        ? '已启用，复制内容将自动同步到手机 (${_connectedDevices.length}台已连接)' 
-                                        : '未启用，手机需开启接收功能',
-                                    style: TextStyle(
-                                      color: _syncToMobile ? Colors.green : Colors.grey, 
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Switch(
-                              value: _syncToMobile,
-                              onChanged: _setSyncToMobile,
-                            ),
-                          ],
-                        ),
-                      ),
                     Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(

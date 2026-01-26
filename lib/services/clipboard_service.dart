@@ -29,6 +29,28 @@ const String cmdCut = '${cmdPrefix}CUT';        // Ctrl+X
 const String cmdUndo = '${cmdPrefix}UNDO';      // Ctrl+Z
 const String cmdRedo = '${cmdPrefix}REDO';      // Ctrl+Y
 
+// 导航键
+const String cmdTab = '${cmdPrefix}TAB';
+const String cmdEsc = '${cmdPrefix}ESC';
+const String cmdHome = '${cmdPrefix}HOME';
+const String cmdEnd = '${cmdPrefix}END';
+const String cmdDelete = '${cmdPrefix}DELETE';
+
+// 文件操作快捷键
+const String cmdSave = '${cmdPrefix}SAVE';           // Ctrl+S
+const String cmdNew = '${cmdPrefix}NEW';             // Ctrl+N
+const String cmdOpen = '${cmdPrefix}OPEN';           // Ctrl+O
+const String cmdClose = '${cmdPrefix}CLOSE';         // Ctrl+W
+const String cmdFind = '${cmdPrefix}FIND';           // Ctrl+F
+const String cmdQuickOpen = '${cmdPrefix}QUICK_OPEN'; // Ctrl+P
+
+// 系统快捷键
+const String cmdWin = '${cmdPrefix}WIN';             // Win键
+const String cmdWinD = '${cmdPrefix}WIN_D';          // Win+D 显示桌面
+const String cmdWinE = '${cmdPrefix}WIN_E';          // Win+E 资源管理器
+const String cmdAltTab = '${cmdPrefix}ALT_TAB';      // Alt+Tab
+const String cmdAltF4 = '${cmdPrefix}ALT_F4';        // Alt+F4
+
 /// 重试配置
 const int _maxRetries = 3;           // 最大重试次数
 const int _retryDelayMs = 30;        // 重试间隔(毫秒)
@@ -106,6 +128,57 @@ class ClipboardService {
         return null;
       case cmdRedo:
         await _simulateModifierKeyWithRetry(PhysicalKeyboardKey.keyY, ModifierKey.controlModifier);
+        return null;
+      // 导航键
+      case cmdTab:
+        await _simulateKeyWithRetry(PhysicalKeyboardKey.tab);
+        return null;
+      case cmdEsc:
+        await _simulateKeyWithRetry(PhysicalKeyboardKey.escape);
+        return null;
+      case cmdHome:
+        await _simulateKeyWithRetry(PhysicalKeyboardKey.home);
+        return null;
+      case cmdEnd:
+        await _simulateKeyWithRetry(PhysicalKeyboardKey.end);
+        return null;
+      case cmdDelete:
+        await _simulateKeyWithRetry(PhysicalKeyboardKey.delete);
+        return null;
+      // 文件操作
+      case cmdSave:
+        await _simulateModifierKeyWithRetry(PhysicalKeyboardKey.keyS, ModifierKey.controlModifier);
+        return null;
+      case cmdNew:
+        await _simulateModifierKeyWithRetry(PhysicalKeyboardKey.keyN, ModifierKey.controlModifier);
+        return null;
+      case cmdOpen:
+        await _simulateModifierKeyWithRetry(PhysicalKeyboardKey.keyO, ModifierKey.controlModifier);
+        return null;
+      case cmdClose:
+        await _simulateModifierKeyWithRetry(PhysicalKeyboardKey.keyW, ModifierKey.controlModifier);
+        return null;
+      case cmdFind:
+        await _simulateModifierKeyWithRetry(PhysicalKeyboardKey.keyF, ModifierKey.controlModifier);
+        return null;
+      case cmdQuickOpen:
+        await _simulateModifierKeyWithRetry(PhysicalKeyboardKey.keyP, ModifierKey.controlModifier);
+        return null;
+      // 系统快捷键
+      case cmdWin:
+        await _simulateKeyWithRetry(PhysicalKeyboardKey.metaLeft);
+        return null;
+      case cmdWinD:
+        await _simulateModifierKeyWithRetry(PhysicalKeyboardKey.keyD, ModifierKey.metaModifier);
+        return null;
+      case cmdWinE:
+        await _simulateModifierKeyWithRetry(PhysicalKeyboardKey.keyE, ModifierKey.metaModifier);
+        return null;
+      case cmdAltTab:
+        await _simulateModifierKeyWithRetry(PhysicalKeyboardKey.tab, ModifierKey.altModifier);
+        return null;
+      case cmdAltF4:
+        await _simulateModifierKeyWithRetry(PhysicalKeyboardKey.f4, ModifierKey.altModifier);
         return null;
       default:
         return null;

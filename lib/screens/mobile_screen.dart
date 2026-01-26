@@ -11,6 +11,7 @@ import '../services/clipboard_sync_service.dart';
 import '../services/mobile_clipboard_helper.dart';
 import 'touchpad_screen.dart';
 import 'simple_input_screen.dart';
+import 'settings_screen.dart';
 import '../services/input_method_service.dart';
 
 // 自动发送设置的存储键
@@ -105,13 +106,6 @@ class _MobileScreenState extends State<MobileScreen> {
     }
   }
   
-  /// 保存自动发送设置
-  Future<void> _saveAutoSendSettings() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_autoSendEnabledKey, _autoSendEnabled);
-    await prefs.setDouble(_autoSendDelayKey, _autoSendDelay);
-  }
-
   @override
   void dispose() {
     _textController.removeListener(_onTextChanged);
@@ -187,20 +181,6 @@ class _MobileScreenState extends State<MobileScreen> {
   Future<void> _stopSyncService() async {
     await _clipboardSyncService.stopServer();
     setState(() => _syncPort = 0);
-  }
-  
-  /// 设置是否接收电脑剪贴板
-  Future<void> _setReceiveFromPc(bool value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_receiveFromPcKey, value);
-    
-    setState(() => _receiveFromPc = value);
-    
-    if (value) {
-      await _startSyncService();
-    } else {
-      await _stopSyncService();
-    }
   }
   
   /// 处理接收到的电脑剪贴板内容
@@ -488,6 +468,37 @@ class _MobileScreenState extends State<MobileScreen> {
     );
   }
   
+  /// 打开设置页面
+  void _openSettings() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => SettingsScreen(
+          callbacks: SettingsCallbacks(
+            onReceiveFromPcChanged: (value) {
+              setState(() => _receiveFromPc = value);
+              if (value) {
+                _startSyncService();
+              } else {
+                _stopSyncService();
+              }
+            },
+            onAutoSendChanged: (value) {
+              setState(() {
+                _autoSendEnabled = value;
+                if (!value) _cancelAutoSendTimer();
+              });
+            },
+            onAutoSendDelayChanged: (value) {
+              setState(() => _autoSendDelay = value);
+              _cancelAutoSendTimer();
+            },
+          ),
+        ),
+      ),
+    );
+  }
+  
   /// 构建方向键按钮（支持长按连续触发）
   Widget _buildArrowButton(IconData icon, String command, String label) {
     final isDisabled = _selectedDevice == null;
@@ -546,6 +557,12 @@ class _MobileScreenState extends State<MobileScreen> {
             icon: const Icon(Icons.touch_app),
             tooltip: '触摸板',
             onPressed: _selectedDevice == null ? null : _openTouchpad,
+          ),
+          // 设置入口
+          IconButton(
+            icon: const Icon(Icons.settings),
+            tooltip: '设置',
+            onPressed: _openSettings,
           ),
         ],
       ),
@@ -623,97 +640,6 @@ class _MobileScreenState extends State<MobileScreen> {
                                 setState(() => _selectedDevice = device);
                               },
                             ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  
-                  // 自动发送设置
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                      child: Column(
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              const Text('停止输入后自动发送'),
-                              Switch(
-                                value: _autoSendEnabled,
-                                onChanged: (value) {
-                                  setState(() {
-                                    _autoSendEnabled = value;
-                                    if (!value) {
-                                      _cancelAutoSendTimer();
-                                    }
-                                  });
-                                  _saveAutoSendSettings();
-                                },
-                              ),
-                            ],
-                          ),
-                          // 延迟时间设置（仅在启用时显示）
-                          if (_autoSendEnabled) ...[
-                            Row(
-                              children: [
-                                const Text('延迟时间: '),
-                                Expanded(
-                                  child: Slider(
-                                    value: _autoSendDelay,
-                                    min: 0.5,
-                                    max: 10,
-                                    divisions: 19,
-                                    label: '${_autoSendDelay.toStringAsFixed(1)} 秒',
-                                    onChanged: (value) {
-                                      setState(() {
-                                        _autoSendDelay = double.parse(value.toStringAsFixed(1));
-                                      });
-                                      _cancelAutoSendTimer();
-                                    },
-                                    onChangeEnd: (value) {
-                                      _saveAutoSendSettings();
-                                    },
-                                  ),
-                                ),
-                                Text('${_autoSendDelay.toStringAsFixed(1)} 秒'),
-                              ],
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  
-                  // 接收电脑剪贴板设置
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text('接收电脑剪贴板'),
-                                Text(
-                                  _receiveFromPc 
-                                      ? '已启用 (监听端口: $_syncPort)' 
-                                      : '关闭时无法接收电脑复制的内容',
-                                  style: TextStyle(
-                                    color: _receiveFromPc ? Colors.green : Colors.grey,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          Switch(
-                            value: _receiveFromPc,
-                            onChanged: _setReceiveFromPc,
-                          ),
                         ],
                       ),
                     ),
