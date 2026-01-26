@@ -1,0 +1,118 @@
+name: Build for Test (No Release)
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Test version (e.g., v1.0.0)'
+        required: true
+        default: 'v1.0.0'
+      # changelog 也可以保留，虽然不发 Release，但在 Action 日志里能看到备注
+      changelog:
+        description: 'Internal notes'
+        required: false
+        type: string
+        default: 'Internal Test Build'
+
+jobs:
+  build-android:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Generate icons
+        run: dart run flutter_launcher_icons
+
+      - name: Parse version
+        id: parse_version
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          VERSION_NAME="${VERSION#v}"
+          MAJOR=$(echo "$VERSION_NAME" | cut -d. -f1)
+          MINOR=$(echo "$VERSION_NAME" | cut -d. -f2)
+          PATCH=$(echo "$VERSION_NAME" | cut -d. -f3)
+          MAJOR=${MAJOR:-0}
+          MINOR=${MINOR:-0}
+          PATCH=${PATCH:-0}
+          BUILD_NUMBER=$((MAJOR * 10000 + MINOR * 100 + PATCH))
+          echo "version_name=$VERSION_NAME" >> $GITHUB_OUTPUT
+          echo "build_number=$BUILD_NUMBER" >> $GITHUB_OUTPUT
+
+      - name: Build APK (Release Mode)
+        # 依然保持 --release，确保性能和正式版一致
+        run: flutter build apk --release --build-name=${{ steps.parse_version.outputs.version_name }} --build-number=${{ steps.parse_version.outputs.build_number }}
+
+      - name: Rename APK with Version
+        # 文件名加上版本号，方便测试
+        run: mv build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/lan_clip_android_${{ github.event.inputs.version }}.apk
+
+      - name: Upload Android artifact
+        uses: actions/upload-artifact@v4
+        with:
+          # Artifact 名字也带上版本
+          name: lan_clip_android_${{ github.event.inputs.version }}
+          path: build/app/outputs/flutter-apk/lan_clip_android_${{ github.event.inputs.version }}.apk
+
+  build-windows:
+    name: Build Windows
+    runs-on: windows-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Generate icons
+        run: dart run flutter_launcher_icons
+
+      - name: Parse version
+        id: parse_version
+        shell: pwsh
+        run: |
+          $VERSION = "${{ github.event.inputs.version }}"
+          $VERSION_NAME = $VERSION -replace '^v', ''
+          $parts = $VERSION_NAME -split '\.'
+          $MAJOR = if ($parts.Length -gt 0) { [int]$parts[0] } else { 0 }
+          $MINOR = if ($parts.Length -gt 1) { [int]$parts[1] } else { 0 }
+          $PATCH = if ($parts.Length -gt 2) { [int]$parts[2] } else { 0 }
+          $BUILD_NUMBER = $MAJOR * 10000 + $MINOR * 100 + $PATCH
+          echo "version_name=$VERSION_NAME" >> $env:GITHUB_OUTPUT
+          echo "build_number=$BUILD_NUMBER" >> $env:GITHUB_OUTPUT
+
+      - name: Build Windows (Release Mode)
+        # 依然保持 --release
+        run: flutter build windows --release --build-name=${{ steps.parse_version.outputs.version_name }} --build-number=${{ steps.parse_version.outputs.build_number }}
+
+      - name: Create ZIP with Version
+        # 压缩包名加上版本号
+        run: Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath lan_clip_windows_${{ github.event.inputs.version }}.zip
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lan_clip_windows_${{ github.event.inputs.version }}
+          path: lan_clip_windows_${{ github.event.inputs.version }}.zip
