@@ -198,10 +198,8 @@ class _MobileScreenState extends State<MobileScreen> {
     
     if (value) {
       await _startSyncService();
-      _showSnackBar('已开启接收电脑剪贴板 (端口: $_syncPort)');
     } else {
       await _stopSyncService();
-      _showSnackBar('已关闭接收电脑剪贴板');
     }
   }
   
@@ -209,13 +207,7 @@ class _MobileScreenState extends State<MobileScreen> {
   Future<void> _onClipboardReceived(ClipboardContent content) async {
     final success = await MobileClipboardHelper.writeContent(content);
     
-    if (success) {
-      if (content.type == ClipboardDataType.text) {
-        _showSnackBar('已接收文本到剪贴板');
-      } else {
-        _showSnackBar('已接收图片(已保存到临时文件)');
-      }
-    } else {
+    if (!success) {
       _showSnackBar('接收失败');
     }
   }
@@ -240,11 +232,9 @@ class _MobileScreenState extends State<MobileScreen> {
       _isSearching = false;
     });
     
-    // 用 SnackBar 通知搜索结果
+    // 未发现设备时提示
     if (_devices.isEmpty) {
       _showSnackBar('未发现设备');
-    } else {
-      _showSnackBar('发现 ${_devices.length} 个设备');
     }
   }
 
@@ -295,7 +285,6 @@ class _MobileScreenState extends State<MobileScreen> {
 
     if (result.success) {
       _textController.clear();
-      _showSnackBar('已发送到 ${_selectedDevice!.name}');
     } else {
       // 如果是密码错误，清除缓存的密码
       if (_selectedDevice!.requiresPassword) {
@@ -391,12 +380,8 @@ class _MobileScreenState extends State<MobileScreen> {
       passwordHash: passwordHash,
     );
     
-    if (!silent) {
-      if (result.success) {
-        _showSnackBar('已发送: $label');
-      } else {
-        _showSnackBar('发送失败');
-      }
+    if (!silent && !result.success) {
+      _showSnackBar('发送失败');
     }
   }
   
@@ -437,7 +422,7 @@ class _MobileScreenState extends State<MobileScreen> {
       onLongPressStart: isDisabled ? null : (_) {
         // 长按开始：立即发送一次，然后每 100ms 连续发送（静默模式）
         _sendCommand(command, label);
-        _longPressTimer = Timer.periodic(const Duration(milliseconds: 100), (_) {
+        _longPressTimer = Timer.periodic(const Duration(milliseconds: 50), (_) {
           _sendCommand(command, label, silent: true);
         });
       },
@@ -501,20 +486,35 @@ class _MobileScreenState extends State<MobileScreen> {
     );
   }
   
-  /// 构建方向键按钮
+  /// 构建方向键按钮（支持长按连续触发）
   Widget _buildArrowButton(IconData icon, String command, String label) {
+    final isDisabled = _selectedDevice == null;
+    
     return SizedBox(
       width: 48,
       height: 48,
-      child: OutlinedButton(
-        onPressed: _selectedDevice == null ? null : () => _sendCommand(command, label),
-        style: OutlinedButton.styleFrom(
-          padding: EdgeInsets.zero,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
+      child: GestureDetector(
+        onLongPressStart: isDisabled ? null : (_) {
+          // 长按开始：立即发送一次，然后每 100ms 连续发送
+          _sendCommand(command, label, silent: true);
+          _longPressTimer = Timer.periodic(const Duration(milliseconds: 50), (_) {
+            _sendCommand(command, label, silent: true);
+          });
+        },
+        onLongPressEnd: isDisabled ? null : (_) {
+          _longPressTimer?.cancel();
+          _longPressTimer = null;
+        },
+        child: OutlinedButton(
+          onPressed: isDisabled ? null : () => _sendCommand(command, label, silent: true),
+          style: OutlinedButton.styleFrom(
+            padding: EdgeInsets.zero,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
           ),
+          child: Icon(icon, size: 24),
         ),
-        child: Icon(icon, size: 24),
       ),
     );
   }

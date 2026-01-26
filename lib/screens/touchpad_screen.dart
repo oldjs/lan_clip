@@ -32,6 +32,9 @@ class _TouchpadScreenState extends State<TouchpadScreen> {
   final Map<int, Offset> _pointers = {};
   double? _lastScrollY;
   Offset? _lastLongPressPosition;
+  
+  // 滚动按钮连续触发定时器
+  Timer? _scrollTimer;
 
   @override
   void initState() {
@@ -241,29 +244,15 @@ class _TouchpadScreenState extends State<TouchpadScreen> {
             ),
           ),
           const SizedBox(width: 12),
-          // 滚轮区
+          // 滚轮上下按钮（触碰即触发）
           Expanded(
             flex: 1,
-            child: GestureDetector(
-              onVerticalDragUpdate: (details) {
-                // 降低滚轮灵敏度，乘以 0.3 让滚动更平滑
-                int delta = (details.delta.dy * -0.3).toInt();
-                if (delta != 0) _sendCommand('CMD:MOUSE_SCROLL:$delta');
-              },
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.05),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.white12),
-                ),
-                child: const Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.unfold_more, color: Colors.white38),
-                    Text('滚轮', style: TextStyle(color: Colors.white38, fontSize: 12)),
-                  ],
-                ),
-              ),
+            child: Column(
+              children: [
+                Expanded(child: _buildScrollButton(isUp: true)),
+                const SizedBox(height: 8),
+                Expanded(child: _buildScrollButton(isUp: false)),
+              ],
             ),
           ),
           const SizedBox(width: 12),
@@ -299,6 +288,41 @@ class _TouchpadScreenState extends State<TouchpadScreen> {
         ),
         alignment: Alignment.center,
         child: Text(label, style: const TextStyle(color: Colors.white70, fontSize: 16)),
+      ),
+    );
+  }
+  
+  /// 滚动按钮（触碰即触发，持续滚动）
+  Widget _buildScrollButton({required bool isUp}) {
+    return Listener(
+      onPointerDown: (_) {
+        // 触碰立即滚动一次，然后每 80ms 连续滚动
+        final delta = isUp ? 3 : -3;
+        _sendCommand('CMD:MOUSE_SCROLL:$delta');
+        _scrollTimer = Timer.periodic(const Duration(milliseconds: 80), (_) {
+          _sendCommand('CMD:MOUSE_SCROLL:$delta');
+        });
+      },
+      onPointerUp: (_) {
+        _scrollTimer?.cancel();
+        _scrollTimer = null;
+      },
+      onPointerCancel: (_) {
+        _scrollTimer?.cancel();
+        _scrollTimer = null;
+      },
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.05),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.white12),
+        ),
+        alignment: Alignment.center,
+        child: Icon(
+          isUp ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+          color: Colors.white38,
+          size: 28,
+        ),
       ),
     );
   }

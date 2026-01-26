@@ -138,7 +138,6 @@ class _SimpleInputScreenState extends State<SimpleInputScreen> {
 
     if (result.success) {
       _textController.clear();
-      _showSnackBar('已发送');
     } else {
       _showSnackBar('发送失败: ${result.error ?? "请检查网络连接"}');
     }
