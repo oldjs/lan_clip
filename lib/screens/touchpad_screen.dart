@@ -246,7 +246,8 @@ class _TouchpadScreenState extends State<TouchpadScreen> {
             flex: 1,
             child: GestureDetector(
               onVerticalDragUpdate: (details) {
-                int delta = (details.delta.dy * -1).toInt();
+                // 降低滚轮灵敏度，乘以 0.3 让滚动更平滑
+                int delta = (details.delta.dy * -0.3).toInt();
                 if (delta != 0) _sendCommand('CMD:MOUSE_SCROLL:$delta');
               },
               child: Container(

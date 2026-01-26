@@ -45,10 +45,19 @@ jobs:
           VERSION="${{ github.event.inputs.version }}"
           # 去掉 v 前缀
           VERSION_NAME="${VERSION#v}"
-          # 提取构建号（取最后一个数字部分，或默认为1）
-          BUILD_NUMBER=$(echo "$VERSION_NAME" | grep -oE '[0-9]+$' || echo "1")
+          # 解析 major.minor.patch 计算 versionCode
+          # 格式: major*10000 + minor*100 + patch，确保版本号递增
+          MAJOR=$(echo "$VERSION_NAME" | cut -d. -f1)
+          MINOR=$(echo "$VERSION_NAME" | cut -d. -f2)
+          PATCH=$(echo "$VERSION_NAME" | cut -d. -f3)
+          # 默认值处理
+          MAJOR=${MAJOR:-0}
+          MINOR=${MINOR:-0}
+          PATCH=${PATCH:-0}
+          BUILD_NUMBER=$((MAJOR * 10000 + MINOR * 100 + PATCH))
           echo "version_name=$VERSION_NAME" >> $GITHUB_OUTPUT
           echo "build_number=$BUILD_NUMBER" >> $GITHUB_OUTPUT
+          echo "Calculated: $VERSION_NAME -> versionCode $BUILD_NUMBER"
 
       - name: Build APK
         run: flutter build apk --release --build-name=${{ steps.parse_version.outputs.version_name }} --build-number=${{ steps.parse_version.outputs.build_number }}
@@ -88,14 +97,16 @@ jobs:
           $VERSION = "${{ github.event.inputs.version }}"
           # 去掉 v 前缀
           $VERSION_NAME = $VERSION -replace '^v', ''
-          # 提取构建号（简单处理：取最后一段数字，或默认为1）
-          if ($VERSION_NAME -match '(\d+)$') {
-            $BUILD_NUMBER = $Matches[1]
-          } else {
-            $BUILD_NUMBER = "1"
-          }
+          # 解析 major.minor.patch 计算 versionCode
+          # 格式: major*10000 + minor*100 + patch，确保版本号递增
+          $parts = $VERSION_NAME -split '\.'
+          $MAJOR = if ($parts.Length -gt 0) { [int]$parts[0] } else { 0 }
+          $MINOR = if ($parts.Length -gt 1) { [int]$parts[1] } else { 0 }
+          $PATCH = if ($parts.Length -gt 2) { [int]$parts[2] } else { 0 }
+          $BUILD_NUMBER = $MAJOR * 10000 + $MINOR * 100 + $PATCH
           echo "version_name=$VERSION_NAME" >> $env:GITHUB_OUTPUT
           echo "build_number=$BUILD_NUMBER" >> $env:GITHUB_OUTPUT
+          echo "Calculated: $VERSION_NAME -> versionCode $BUILD_NUMBER"
 
       - name: Build Windows
         run: flutter build windows --release --build-name=${{ steps.parse_version.outputs.version_name }} --build-number=${{ steps.parse_version.outputs.build_number }}
