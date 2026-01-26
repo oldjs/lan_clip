@@ -462,7 +462,7 @@ class _DesktopScreenState extends State<DesktopScreen>
                         const SizedBox(width: 8),
                         Text(
                           _isRunning ? '服务运行中' : '服务未启动',
-                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                          style: const TextStyle(fontSize: 18),
                         ),
                       ],
                     ),
@@ -482,7 +482,7 @@ class _DesktopScreenState extends State<DesktopScreen>
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text('开机自启', style: TextStyle(fontWeight: FontWeight.w500)),
+                                  Text('开机自启'),
                                   Text(
                                     '开机后自动启动程序',
                                     style: TextStyle(color: Colors.grey, fontSize: 12),
@@ -508,7 +508,7 @@ class _DesktopScreenState extends State<DesktopScreen>
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text('启动时隐藏', style: TextStyle(fontWeight: FontWeight.w500)),
+                                  Text('启动时隐藏'),
                                   Text(
                                     '启动后自动最小化到系统托盘',
                                     style: TextStyle(color: Colors.grey, fontSize: 12),
@@ -533,7 +533,7 @@ class _DesktopScreenState extends State<DesktopScreen>
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Text('密码保护', style: TextStyle(fontWeight: FontWeight.w500)),
+                                const Text('密码保护'),
                                 Text(
                                   _passwordEnabled ? '已启用，手机连接需要密码' : '未启用，任何人都可连接',
                                   style: TextStyle(
@@ -562,7 +562,7 @@ class _DesktopScreenState extends State<DesktopScreen>
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text('自动粘贴', style: TextStyle(fontWeight: FontWeight.w500)),
+                                  Text('自动粘贴'),
                                   Text(
                                     '收到内容后自动在光标位置粘贴',
                                     style: TextStyle(color: Colors.grey, fontSize: 12),
@@ -588,7 +588,7 @@ class _DesktopScreenState extends State<DesktopScreen>
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  const Text('同步到手机', style: TextStyle(fontWeight: FontWeight.w500)),
+                                  const Text('同步到手机'),
                                   Text(
                                     _syncToMobile 
                                         ? '已启用，复制内容将自动同步到手机 (${_connectedDevices.length}台已连接)' 
@@ -639,7 +639,7 @@ class _DesktopScreenState extends State<DesktopScreen>
               children: [
                 const Text(
                   '接收历史',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  style: TextStyle(fontSize: 16),
                 ),
                 Row(
                   children: [
@@ -708,7 +708,7 @@ class _DesktopScreenState extends State<DesktopScreen>
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(label, style: const TextStyle(color: Colors.grey)),
-          SelectableText(value, style: const TextStyle(fontWeight: FontWeight.w500)),
+          SelectableText(value),
         ],
       ),
     );

@@ -116,7 +116,7 @@ class _TouchpadScreenState extends State<TouchpadScreen> {
             children: [
               const Text('灵敏度', style: TextStyle(color: Colors.white70)),
               Text('${_sensitivity.toStringAsFixed(1)}x',
-                  style: const TextStyle(color: Colors.cyanAccent, fontWeight: FontWeight.bold)),
+                  style: const TextStyle(color: Colors.cyanAccent)),
             ],
           ),
           SliderTheme(
@@ -316,7 +316,6 @@ class _TouchpadScreenState extends State<TouchpadScreen> {
               style: const TextStyle(
                 color: Colors.cyanAccent,
                 fontSize: 10,
-                fontWeight: FontWeight.w500,
               ),
             ),
           ],

@@ -569,7 +569,7 @@ class _MobileScreenState extends State<MobileScreen> {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              const Text('目标设备', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                              const Text('目标设备', style: TextStyle(fontSize: 16)),
                               ElevatedButton.icon(
                                 onPressed: _isSearching ? null : _searchDevices,
                                 icon: _isSearching
