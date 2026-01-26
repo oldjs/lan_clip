@@ -56,7 +56,7 @@ dependencies:
   package_info_plus: ^8.0.0
   
   # 剪贴板监听 (Windows)
-  clipboard_watcher: ^0.2.1
+  clipboard_watcher: ^0.3.0
   
   # 剪贴板图片读写
   pasteboard: ^0.4.0
