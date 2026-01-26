@@ -1,0 +1,84 @@
+import 'dart:async';
+import 'dart:io';
+import 'dart:convert';
+import '../models/clipboard_data.dart';
+
+/// 手机端剪贴板同步接收服务
+/// 监听电脑端推送的剪贴板内容
+class ClipboardSyncService {
+  static const int defaultSyncPort = 8889;
+  
+  ServerSocket? _server;
+  final _contentController = StreamController<ClipboardContent>.broadcast();
+  int _port = defaultSyncPort;
+  
+  /// 接收到的剪贴板内容流
+  Stream<ClipboardContent> get contentStream => _contentController.stream;
+  
+  /// 当前监听端口
+  int get port => _port;
+  
+  /// 启动同步服务(手机端)
+  Future<int> startServer({int port = defaultSyncPort}) async {
+    await _server?.close();
+    
+    // 尝试绑定端口，如果失败则使用随机端口
+    try {
+      _server = await ServerSocket.bind(InternetAddress.anyIPv4, port);
+    } catch (e) {
+      _server = await ServerSocket.bind(InternetAddress.anyIPv4, 0);
+    }
+    
+    _port = _server!.port;
+    
+    _server!.listen((Socket client) {
+      _handleClient(client);
+    });
+    
+    return _port;
+  }
+  
+  /// 处理来自电脑端的连接
+  void _handleClient(Socket client) {
+    final buffer = <int>[];
+    
+    client.listen(
+      (data) {
+        buffer.addAll(data);
+      },
+      onDone: () {
+        if (buffer.isEmpty) {
+          client.close();
+          return;
+        }
+        
+        try {
+          final message = utf8.decode(buffer);
+          final content = ClipboardContent.deserialize(message);
+          if (content != null) {
+            _contentController.add(content);
+          }
+        } catch (e) {
+          // 解析失败，忽略
+        }
+        
+        client.close();
+      },
+      onError: (error) {
+        client.close();
+      },
+    );
+  }
+  
+  /// 停止服务
+  Future<void> stopServer() async {
+    await _server?.close();
+    _server = null;
+  }
+  
+  /// 释放资源
+  void dispose() {
+    stopServer();
+    _contentController.close();
+  }
+}

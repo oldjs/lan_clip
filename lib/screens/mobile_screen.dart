@@ -2,15 +2,19 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/device.dart';
+import '../models/clipboard_data.dart';
 import '../services/discovery_service.dart';
 import '../services/socket_service.dart';
 import '../services/auth_service.dart';
 import '../services/clipboard_service.dart' show cmdBackspace, cmdSpace, cmdClear, cmdEnter, cmdArrowUp, cmdArrowDown, cmdArrowLeft, cmdArrowRight;
+import '../services/clipboard_sync_service.dart';
+import '../services/mobile_clipboard_helper.dart';
 import 'touchpad_screen.dart';
 
 // 自动发送设置的存储键
 const String _autoSendEnabledKey = 'auto_send_enabled';
 const String _autoSendDelayKey = 'auto_send_delay';
+const String _receiveFromPcKey = 'receive_from_pc_enabled';
 
 /// 手机端界面 - 输入内容并发送到电脑
 class MobileScreen extends StatefulWidget {
@@ -24,6 +28,7 @@ class _MobileScreenState extends State<MobileScreen> with WidgetsBindingObserver
   final _textController = TextEditingController();
   final _discoveryService = DiscoveryService();
   final _socketService = SocketService();
+  final _clipboardSyncService = ClipboardSyncService();
   final _inputFocusNode = FocusNode(); // 输入框焦点
   
   final List<Device> _devices = [];
@@ -32,11 +37,14 @@ class _MobileScreenState extends State<MobileScreen> with WidgetsBindingObserver
   bool _isSending = false;
   String _statusMessage = '';
   bool _isKeyboardVisible = false; // 键盘是否可见
+  bool _receiveFromPc = false;     // 是否接收电脑剪贴板
+  int _syncPort = 0;               // 剪贴板同步监听端口
   
   // 存储设备对应的密码哈希（用户输入后缓存）
   final Map<String, String> _devicePasswords = {};
   
   StreamSubscription<Device>? _deviceSubscription;
+  StreamSubscription<ClipboardContent>? _syncSubscription;
   
   // 自动发送相关状态
   bool _autoSendEnabled = false;
@@ -49,7 +57,7 @@ class _MobileScreenState extends State<MobileScreen> with WidgetsBindingObserver
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this); // 监听键盘状态
-    _loadAutoSendSettings();
+    _loadSettings();
     
     _deviceSubscription = _discoveryService.deviceStream.listen((device) {
       setState(() {
@@ -62,6 +70,11 @@ class _MobileScreenState extends State<MobileScreen> with WidgetsBindingObserver
       });
     });
     
+    // 监听电脑推送的剪贴板内容
+    _syncSubscription = _clipboardSyncService.contentStream.listen((content) {
+      _onClipboardReceived(content);
+    });
+    
     // 监听输入变化，触发自动发送计时
     _textController.addListener(_onTextChanged);
     
@@ -71,13 +84,21 @@ class _MobileScreenState extends State<MobileScreen> with WidgetsBindingObserver
     });
   }
   
-  /// 加载自动发送设置
-  Future<void> _loadAutoSendSettings() async {
+  /// 加载设置
+  Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
+    final receiveFromPc = prefs.getBool(_receiveFromPcKey) ?? false;
+    
     setState(() {
       _autoSendEnabled = prefs.getBool(_autoSendEnabledKey) ?? false;
       _autoSendDelay = prefs.getInt(_autoSendDelayKey) ?? 3;
+      _receiveFromPc = receiveFromPc;
     });
+    
+    // 如果启用了接收功能，启动同步服务
+    if (receiveFromPc) {
+      await _startSyncService();
+    }
   }
   
   /// 保存自动发送设置
@@ -94,8 +115,10 @@ class _MobileScreenState extends State<MobileScreen> with WidgetsBindingObserver
     _textController.dispose();
     _inputFocusNode.dispose();
     _deviceSubscription?.cancel();
+    _syncSubscription?.cancel();
     _discoveryService.dispose();
     _socketService.dispose();
+    _clipboardSyncService.dispose();
     _cancelAutoSendTimer();
     super.dispose();
   }
@@ -161,6 +184,49 @@ class _MobileScreenState extends State<MobileScreen> with WidgetsBindingObserver
       });
     }
   }
+  
+  /// 启动剪贴板同步服务
+  Future<void> _startSyncService() async {
+    final port = await _clipboardSyncService.startServer();
+    setState(() => _syncPort = port);
+  }
+  
+  /// 停止剪贴板同步服务
+  Future<void> _stopSyncService() async {
+    await _clipboardSyncService.stopServer();
+    setState(() => _syncPort = 0);
+  }
+  
+  /// 设置是否接收电脑剪贴板
+  Future<void> _setReceiveFromPc(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_receiveFromPcKey, value);
+    
+    setState(() => _receiveFromPc = value);
+    
+    if (value) {
+      await _startSyncService();
+      _showSnackBar('已开启接收电脑剪贴板 (端口: $_syncPort)');
+    } else {
+      await _stopSyncService();
+      _showSnackBar('已关闭接收电脑剪贴板');
+    }
+  }
+  
+  /// 处理接收到的电脑剪贴板内容
+  Future<void> _onClipboardReceived(ClipboardContent content) async {
+    final success = await MobileClipboardHelper.writeContent(content);
+    
+    if (success) {
+      if (content.type == ClipboardDataType.text) {
+        _showSnackBar('已接收文本到剪贴板');
+      } else {
+        _showSnackBar('已接收图片(已保存到临时文件)');
+      }
+    } else {
+      _showSnackBar('接收失败');
+    }
+  }
 
   /// 搜索设备
   Future<void> _searchDevices() async {
@@ -171,7 +237,10 @@ class _MobileScreenState extends State<MobileScreen> with WidgetsBindingObserver
       _statusMessage = '正在搜索设备...';
     });
 
-    await _discoveryService.sendDiscoveryBroadcast();
+    // 携带同步端口(如果启用了接收功能)
+    await _discoveryService.sendDiscoveryBroadcast(
+      syncPort: _receiveFromPc ? _syncPort : null,
+    );
 
     // 等待搜索完成
     await Future.delayed(const Duration(seconds: 3));
@@ -561,6 +630,41 @@ class _MobileScreenState extends State<MobileScreen> with WidgetsBindingObserver
                           ],
                         ),
                       ],
+                    ],
+                  ),
+                ),
+              ),
+            if (!_isKeyboardVisible) const SizedBox(height: 12),
+            
+            // 接收电脑剪贴板设置 - 键盘弹出时隐藏
+            if (!_isKeyboardVisible)
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('接收电脑剪贴板'),
+                            Text(
+                              _receiveFromPc 
+                                  ? '已启用 (监听端口: $_syncPort)' 
+                                  : '关闭时无法接收电脑复制的内容',
+                              style: TextStyle(
+                                color: _receiveFromPc ? Colors.green : Colors.grey,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Switch(
+                        value: _receiveFromPc,
+                        onChanged: _setReceiveFromPc,
+                      ),
                     ],
                   ),
                 ),

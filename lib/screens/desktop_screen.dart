@@ -5,9 +5,12 @@ import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:launch_at_startup/launch_at_startup.dart';
+import '../models/device.dart';
+import '../models/clipboard_data.dart';
 import '../services/discovery_service.dart';
 import '../services/socket_service.dart';
 import '../services/clipboard_service.dart';
+import '../services/clipboard_watcher_service.dart';
 import '../services/auth_service.dart';
 import '../main.dart' show startHiddenKey;
 
@@ -23,6 +26,7 @@ class _DesktopScreenState extends State<DesktopScreen>
     with TrayListener, WindowListener {
   final _discoveryService = DiscoveryService();
   final _socketService = SocketService();
+  final _clipboardWatcher = ClipboardWatcherService();
   
   String _localIp = '获取中...';
   int _tcpPort = SocketService.defaultPort;
@@ -32,12 +36,17 @@ class _DesktopScreenState extends State<DesktopScreen>
   bool _passwordEnabled = false;  // 密码保护功能
   bool _launchAtStartup = false;  // 开机自启功能
   bool _startHidden = false;      // 启动时隐藏到托盘
+  bool _syncToMobile = false;     // 同步剪贴板到手机
   final List<_ReceivedMessage> _messages = [];
+  final List<Device> _connectedDevices = []; // 已连接的手机设备
   
   StreamSubscription<AuthResult>? _messageSubscription;
+  StreamSubscription<Device>? _connectedDeviceSubscription;
+  StreamSubscription<ClipboardContent>? _clipboardSubscription;
   
   // 设置项的存储键
   static const String _autoPasteKey = 'auto_paste_enabled';
+  static const String _syncToMobileKey = 'sync_to_mobile_enabled';
 
   @override
   void initState() {
@@ -67,6 +76,7 @@ class _DesktopScreenState extends State<DesktopScreen>
     setState(() {
       _autoPaste = prefs.getBool(_autoPasteKey) ?? false;
       _startHidden = prefs.getBool(startHiddenKey) ?? false;
+      _syncToMobile = prefs.getBool(_syncToMobileKey) ?? false;
       _passwordEnabled = passwordEnabled;
       _launchAtStartup = startupEnabled;
     });
@@ -109,8 +119,11 @@ class _DesktopScreenState extends State<DesktopScreen>
     trayManager.removeListener(this);
     windowManager.removeListener(this);
     _messageSubscription?.cancel();
+    _connectedDeviceSubscription?.cancel();
+    _clipboardSubscription?.cancel();
     _discoveryService.dispose();
     _socketService.dispose();
+    _clipboardWatcher.dispose();
     super.dispose();
   }
 
@@ -168,6 +181,21 @@ class _DesktopScreenState extends State<DesktopScreen>
       _messageSubscription = _socketService.messageStream.listen((result) {
         _onAuthResult(result);
       });
+      
+      // 监听连接的手机设备
+      _connectedDeviceSubscription = _discoveryService.connectedDeviceStream.listen((device) {
+        _onDeviceConnected(device);
+      });
+      
+      // 监听剪贴板变化(同步到手机)
+      _clipboardSubscription = _clipboardWatcher.contentStream.listen((content) {
+        _onClipboardChanged(content);
+      });
+      
+      // 如果启用了同步，开始监听剪贴板
+      if (_syncToMobile) {
+        await _clipboardWatcher.startWatching();
+      }
 
       setState(() => _isRunning = true);
       
@@ -307,6 +335,54 @@ class _DesktopScreenState extends State<DesktopScreen>
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message), duration: const Duration(seconds: 2)),
     );
+  }
+  
+  /// 处理手机设备连接
+  void _onDeviceConnected(Device device) {
+    setState(() {
+      // 避免重复添加
+      final exists = _connectedDevices.any((d) => d.ip == device.ip);
+      if (!exists) {
+        _connectedDevices.add(device);
+      } else {
+        // 更新已有设备的 syncPort
+        final index = _connectedDevices.indexWhere((d) => d.ip == device.ip);
+        if (index != -1) {
+          _connectedDevices[index] = device;
+        }
+      }
+    });
+  }
+  
+  /// 处理剪贴板变化，推送到手机
+  Future<void> _onClipboardChanged(ClipboardContent content) async {
+    if (!_syncToMobile || _connectedDevices.isEmpty) return;
+    
+    // 忽略下一次变化(防止循环)
+    _clipboardWatcher.ignoreNextChange();
+    
+    // 推送到所有已连接的手机
+    await _socketService.pushClipboardToDevices(_connectedDevices, content);
+    
+    // 显示同步提示
+    final typeStr = content.type == ClipboardDataType.text ? '文本' : '图片';
+    _showSnackBar('已同步$typeStr到 ${_connectedDevices.length} 台手机');
+  }
+  
+  /// 设置同步到手机开关
+  Future<void> _setSyncToMobile(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_syncToMobileKey, value);
+    
+    setState(() => _syncToMobile = value);
+    
+    if (value) {
+      await _clipboardWatcher.startWatching();
+      _showSnackBar('已开启剪贴板同步到手机');
+    } else {
+      await _clipboardWatcher.stopWatching();
+      _showSnackBar('已关闭剪贴板同步');
+    }
   }
 
   // ========== 托盘事件 ==========
@@ -493,6 +569,37 @@ class _DesktopScreenState extends State<DesktopScreen>
                             Switch(
                               value: _autoPaste,
                               onChanged: _setAutoPaste,
+                            ),
+                          ],
+                        ),
+                      ),
+                    // 同步剪贴板到手机设置
+                    if (Platform.isWindows)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text('同步到手机', style: TextStyle(fontWeight: FontWeight.w500)),
+                                  Text(
+                                    _syncToMobile 
+                                        ? '已启用，复制内容将自动同步到手机 (${_connectedDevices.length}台已连接)' 
+                                        : '未启用，手机需开启接收功能',
+                                    style: TextStyle(
+                                      color: _syncToMobile ? Colors.green : Colors.grey, 
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Switch(
+                              value: _syncToMobile,
+                              onChanged: _setSyncToMobile,
                             ),
                           ],
                         ),

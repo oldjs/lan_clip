@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:convert';
+import '../models/device.dart';
+import '../models/clipboard_data.dart';
 
 /// 认证消息结果
 class AuthResult {
@@ -144,6 +146,35 @@ class SocketService {
     } catch (e) {
       return SendResult(success: false, error: e.toString());
     }
+  }
+  
+  /// 推送剪贴板内容到多个设备(电脑端使用)
+  /// 向所有已连接的手机推送剪贴板内容
+  Future<void> pushClipboardToDevices(
+    List<Device> devices, 
+    ClipboardContent content,
+  ) async {
+    if (devices.isEmpty) return;
+    
+    final data = content.serialize();
+    
+    // 并行推送到所有设备
+    await Future.wait(
+      devices.where((d) => d.syncPort != null).map((device) async {
+        try {
+          final socket = await Socket.connect(
+            device.ip, 
+            device.syncPort!,
+            timeout: const Duration(seconds: 3),
+          );
+          socket.write(data);
+          await socket.flush();
+          await socket.close();
+        } catch (e) {
+          // 忽略单个设备的推送失败
+        }
+      }),
+    );
   }
 
   /// 停止服务器

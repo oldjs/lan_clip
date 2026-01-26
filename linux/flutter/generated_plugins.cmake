@@ -3,6 +3,8 @@
 #
 
 list(APPEND FLUTTER_PLUGIN_LIST
+  clipboard_watcher
+  pasteboard
   screen_retriever_linux
   tray_manager
   window_manager

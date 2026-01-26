@@ -4,6 +4,7 @@ class Device {
   final int port;
   final String name;
   final bool requiresPassword;  // 是否需要密码
+  final int? syncPort;          // 剪贴板同步监听端口(手机端)
   final DateTime discoveredAt;
 
   Device({
@@ -11,11 +12,12 @@ class Device {
     required this.port,
     required this.name,
     this.requiresPassword = false,
+    this.syncPort,
     DateTime? discoveredAt,
   }) : discoveredAt = discoveredAt ?? DateTime.now();
 
   /// 从 UDP 发现响应解析设备信息
-  /// 响应格式: "LAN_CLIP|{name}|{port}|{requiresPassword:0/1}"
+  /// 响应格式: "LAN_CLIP|{name}|{port}|{requiresPassword:0/1}|{syncPort}"
   factory Device.fromDiscoveryResponse(String response, String ip) {
     final parts = response.split('|');
     if (parts.length >= 3 && parts[0] == 'LAN_CLIP') {
@@ -24,9 +26,22 @@ class Device {
         name: parts[1],
         port: int.tryParse(parts[2]) ?? 8888,
         requiresPassword: parts.length >= 4 && parts[3] == '1',
+        syncPort: parts.length >= 5 ? int.tryParse(parts[4]) : null,
       );
     }
     return Device(ip: ip, name: 'Unknown', port: 8888);
+  }
+  
+  /// 复制并更新 syncPort
+  Device copyWith({int? syncPort}) {
+    return Device(
+      ip: ip,
+      port: port,
+      name: name,
+      requiresPassword: requiresPassword,
+      syncPort: syncPort ?? this.syncPort,
+      discoveredAt: discoveredAt,
+    );
   }
 
   @override
