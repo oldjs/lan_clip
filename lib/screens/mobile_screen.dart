@@ -11,6 +11,7 @@ import '../services/clipboard_sync_service.dart';
 import '../services/mobile_clipboard_helper.dart';
 import 'touchpad_screen.dart';
 import 'simple_input_screen.dart';
+import '../services/input_method_service.dart';
 
 // 自动发送设置的存储键
 const String _autoSendEnabledKey = 'auto_send_enabled';
@@ -51,11 +52,12 @@ class _MobileScreenState extends State<MobileScreen> {
   Timer? _autoSendTimer;
   int _countdownSeconds = 0; // 倒计时剩余秒数
   Timer? _countdownTimer; // 倒计时显示定时器
+  Timer? _longPressTimer; // 长按连续触发定时器
 
   @override
   void initState() {
     super.initState();
-    _loadSettings();
+    _initialize();
     
     _deviceSubscription = _discoveryService.deviceStream.listen((device) {
       setState(() {
@@ -75,11 +77,15 @@ class _MobileScreenState extends State<MobileScreen> {
     
     // 监听输入变化，触发自动发送计时
     _textController.addListener(_onTextChanged);
-    
-    // 启动后自动搜索一次设备
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+  }
+  
+  /// 初始化：加载设置 -> 搜索设备（确保顺序执行）
+  Future<void> _initialize() async {
+    await _loadSettings();
+    // 设置加载完成后再搜索设备，确保 syncPort 已就绪
+    if (mounted) {
       _searchDevices();
-    });
+    }
   }
   
   /// 加载设置
@@ -117,6 +123,7 @@ class _MobileScreenState extends State<MobileScreen> {
     _socketService.dispose();
     _clipboardSyncService.dispose();
     _cancelAutoSendTimer();
+    _longPressTimer?.cancel();
     super.dispose();
   }
   
@@ -353,9 +360,10 @@ class _MobileScreenState extends State<MobileScreen> {
   }
   
   /// 发送控制指令到电脑
-  Future<void> _sendCommand(String command, String label) async {
+  /// [silent] 为 true 时不显示提示（用于长按连续触发）
+  Future<void> _sendCommand(String command, String label, {bool silent = false}) async {
     if (_selectedDevice == null) {
-      _showSnackBar('请先选择目标设备');
+      if (!silent) _showSnackBar('请先选择目标设备');
       return;
     }
     
@@ -368,6 +376,7 @@ class _MobileScreenState extends State<MobileScreen> {
       final deviceKey = '${_selectedDevice!.ip}:${_selectedDevice!.port}';
       passwordHash = _devicePasswords[deviceKey];
       if (passwordHash == null) {
+        if (silent) return; // 长按时不弹密码框
         final password = await _showPasswordDialog();
         if (password == null) return;
         passwordHash = AuthService.hashPassword(password);
@@ -382,10 +391,12 @@ class _MobileScreenState extends State<MobileScreen> {
       passwordHash: passwordHash,
     );
     
-    if (result.success) {
-      _showSnackBar('已发送: $label');
-    } else {
-      _showSnackBar('发送失败');
+    if (!silent) {
+      if (result.success) {
+        _showSnackBar('已发送: $label');
+      } else {
+        _showSnackBar('发送失败');
+      }
     }
   }
   
@@ -409,6 +420,46 @@ class _MobileScreenState extends State<MobileScreen> {
           const SizedBox(height: 2),
           Text(label, style: const TextStyle(fontSize: 11)),
         ],
+      ),
+    );
+  }
+  
+  /// 构建支持长按连续触发的快捷操作按钮
+  Widget _buildCommandButtonWithLongPress({
+    required IconData icon,
+    required String label,
+    required String command,
+    Color? color,
+  }) {
+    final isDisabled = _selectedDevice == null;
+    
+    return GestureDetector(
+      onLongPressStart: isDisabled ? null : (_) {
+        // 长按开始：立即发送一次，然后每 100ms 连续发送（静默模式）
+        _sendCommand(command, label);
+        _longPressTimer = Timer.periodic(const Duration(milliseconds: 100), (_) {
+          _sendCommand(command, label, silent: true);
+        });
+      },
+      onLongPressEnd: isDisabled ? null : (_) {
+        // 长按结束：停止定时器
+        _longPressTimer?.cancel();
+        _longPressTimer = null;
+      },
+      child: OutlinedButton(
+        onPressed: isDisabled ? null : () => _sendCommand(command, label),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: color,
+          padding: const EdgeInsets.symmetric(vertical: 10),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 18),
+            const SizedBox(height: 2),
+            Text(label, style: const TextStyle(fontSize: 11)),
+          ],
+        ),
       ),
     );
   }
@@ -475,6 +526,13 @@ class _MobileScreenState extends State<MobileScreen> {
         title: const Text('LAN Clip - 发送端'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         actions: [
+          // 切换输入法按钮（仅 Android）
+          if (InputMethodService.isSupported)
+            IconButton(
+              icon: const Icon(Icons.keyboard),
+              tooltip: '切换输入法',
+              onPressed: () => InputMethodService.showInputMethodPicker(),
+            ),
           // 简洁输入页面入口
           IconButton(
             icon: const Icon(Icons.edit_note),
@@ -718,11 +776,11 @@ class _MobileScreenState extends State<MobileScreen> {
                     ),
                   const SizedBox(height: 12),
                   
-                  // 快捷操作按钮 - 第一行
+                  // 快捷操作按钮 - 第一行（退格/空格/回车支持长按连续触发）
                   Row(
                     children: [
                       Expanded(
-                        child: _buildCommandButton(
+                        child: _buildCommandButtonWithLongPress(
                           icon: Icons.backspace_outlined,
                           label: '退格',
                           command: cmdBackspace,
@@ -730,7 +788,7 @@ class _MobileScreenState extends State<MobileScreen> {
                       ),
                       const SizedBox(width: 6),
                       Expanded(
-                        child: _buildCommandButton(
+                        child: _buildCommandButtonWithLongPress(
                           icon: Icons.space_bar,
                           label: '空格',
                           command: cmdSpace,
@@ -738,7 +796,7 @@ class _MobileScreenState extends State<MobileScreen> {
                       ),
                       const SizedBox(width: 6),
                       Expanded(
-                        child: _buildCommandButton(
+                        child: _buildCommandButtonWithLongPress(
                           icon: Icons.keyboard_return,
                           label: '回车',
                           command: cmdEnter,

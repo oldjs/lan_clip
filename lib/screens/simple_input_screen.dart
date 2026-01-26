@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/device.dart';
 import '../services/socket_service.dart';
+import '../services/input_method_service.dart';
 
 // 自动发送设置的存储键（与主页面共享）
 const String _autoSendEnabledKey = 'auto_send_enabled';
@@ -155,6 +156,15 @@ class _SimpleInputScreenState extends State<SimpleInputScreen> {
       appBar: AppBar(
         title: Text('发送到 ${widget.device.name}'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+        actions: [
+          // 切换输入法按钮（仅 Android）
+          if (InputMethodService.isSupported)
+            IconButton(
+              icon: const Icon(Icons.keyboard),
+              tooltip: '切换输入法',
+              onPressed: () => InputMethodService.showInputMethodPicker(),
+            ),
+        ],
       ),
       body: SafeArea(
         child: Column(
