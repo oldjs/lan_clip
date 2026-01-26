@@ -29,6 +29,11 @@ const String cmdCut = '${cmdPrefix}CUT';        // Ctrl+X
 const String cmdUndo = '${cmdPrefix}UNDO';      // Ctrl+Z
 const String cmdRedo = '${cmdPrefix}REDO';      // Ctrl+Y
 
+/// 重试配置
+const int _maxRetries = 3;           // 最大重试次数
+const int _retryDelayMs = 30;        // 重试间隔(毫秒)
+const int _keyPressDelayMs = 10;     // 按键之间的延迟(毫秒)
+
 /// 剪切板服务
 class ClipboardService {
   /// 判断是否为控制指令
@@ -50,33 +55,33 @@ class ClipboardService {
     
     switch (command) {
       case cmdBackspace:
-        await simulateBackspace();
+        await _simulateKeyWithRetry(PhysicalKeyboardKey.backspace);
         return '退格';
       case cmdSpace:
-        await simulateSpace();
+        await _simulateKeyWithRetry(PhysicalKeyboardKey.space);
         return '空格';
       case cmdClear:
-        await simulateClear();
+        await _simulateClearWithRetry();
         return '清空';
       case cmdEnter:
-        await simulateEnter();
+        await _simulateKeyWithRetry(PhysicalKeyboardKey.enter);
         return '回车';
       case cmdArrowUp:
-        await simulateArrow(PhysicalKeyboardKey.arrowUp);
+        await _simulateKeyWithRetry(PhysicalKeyboardKey.arrowUp);
         return '上移';
       case cmdArrowDown:
-        await simulateArrow(PhysicalKeyboardKey.arrowDown);
+        await _simulateKeyWithRetry(PhysicalKeyboardKey.arrowDown);
         return '下移';
       case cmdArrowLeft:
-        await simulateArrow(PhysicalKeyboardKey.arrowLeft);
+        await _simulateKeyWithRetry(PhysicalKeyboardKey.arrowLeft);
         return '左移';
       case cmdArrowRight:
-        await simulateArrow(PhysicalKeyboardKey.arrowRight);
+        await _simulateKeyWithRetry(PhysicalKeyboardKey.arrowRight);
         return '右移';
-      // 鼠标控制指令
+      // 鼠标控制指令（鼠标操作本身就很快，不需要重试）
       case cmdMouseLeftClick:
         MouseService().leftClick();
-        return null; // 鼠标操作不显示提示
+        return null;
       case cmdMouseRightClick:
         MouseService().rightClick();
         return null;
@@ -88,19 +93,19 @@ class ClipboardService {
         return null;
       // 快捷键指令
       case cmdCopy:
-        await simulateCopy();
+        await _simulateModifierKeyWithRetry(PhysicalKeyboardKey.keyC, ModifierKey.controlModifier);
         return null;
       case cmdPaste:
-        await simulatePaste();
+        await _simulateModifierKeyWithRetry(PhysicalKeyboardKey.keyV, ModifierKey.controlModifier);
         return null;
       case cmdCut:
-        await simulateCut();
+        await _simulateModifierKeyWithRetry(PhysicalKeyboardKey.keyX, ModifierKey.controlModifier);
         return null;
       case cmdUndo:
-        await simulateUndo();
+        await _simulateModifierKeyWithRetry(PhysicalKeyboardKey.keyZ, ModifierKey.controlModifier);
         return null;
       case cmdRedo:
-        await simulateRedo();
+        await _simulateModifierKeyWithRetry(PhysicalKeyboardKey.keyY, ModifierKey.controlModifier);
         return null;
       default:
         return null;
@@ -128,76 +133,105 @@ class ClipboardService {
     return null;
   }
   
+  // ==================== 带重试的按键模拟 ====================
+  
+  /// 带重试的单键模拟
+  static Future<bool> _simulateKeyWithRetry(PhysicalKeyboardKey key) async {
+    for (int i = 0; i < _maxRetries; i++) {
+      try {
+        await keyPressSimulator.simulateKeyDown(key, []);
+        await Future.delayed(const Duration(milliseconds: _keyPressDelayMs));
+        await keyPressSimulator.simulateKeyUp(key, []);
+        return true;
+      } catch (e) {
+        if (i < _maxRetries - 1) {
+          await Future.delayed(const Duration(milliseconds: _retryDelayMs));
+        }
+      }
+    }
+    return false;
+  }
+  
+  /// 带重试的组合键模拟 (如 Ctrl+C)
+  static Future<bool> _simulateModifierKeyWithRetry(
+    PhysicalKeyboardKey key, 
+    ModifierKey modifier,
+  ) async {
+    for (int i = 0; i < _maxRetries; i++) {
+      try {
+        await keyPressSimulator.simulateKeyDown(key, [modifier]);
+        await Future.delayed(const Duration(milliseconds: _keyPressDelayMs));
+        await keyPressSimulator.simulateKeyUp(key, [modifier]);
+        return true;
+      } catch (e) {
+        if (i < _maxRetries - 1) {
+          await Future.delayed(const Duration(milliseconds: _retryDelayMs));
+        }
+      }
+    }
+    return false;
+  }
+  
+  /// 带重试的清空操作 (Ctrl+A, Delete)
+  static Future<bool> _simulateClearWithRetry() async {
+    for (int i = 0; i < _maxRetries; i++) {
+      try {
+        // Ctrl+A 全选
+        await keyPressSimulator.simulateKeyDown(
+          PhysicalKeyboardKey.keyA,
+          [ModifierKey.controlModifier],
+        );
+        await Future.delayed(const Duration(milliseconds: _keyPressDelayMs));
+        await keyPressSimulator.simulateKeyUp(
+          PhysicalKeyboardKey.keyA,
+          [ModifierKey.controlModifier],
+        );
+        // 短暂延迟确保全选完成
+        await Future.delayed(const Duration(milliseconds: 30));
+        // Delete 删除
+        await keyPressSimulator.simulateKeyDown(PhysicalKeyboardKey.delete, []);
+        await Future.delayed(const Duration(milliseconds: _keyPressDelayMs));
+        await keyPressSimulator.simulateKeyUp(PhysicalKeyboardKey.delete, []);
+        return true;
+      } catch (e) {
+        if (i < _maxRetries - 1) {
+          await Future.delayed(const Duration(milliseconds: _retryDelayMs));
+        }
+      }
+    }
+    return false;
+  }
+  
+  // ==================== 基础操作（保持向后兼容） ====================
+  
   /// 模拟退格键
   static Future<bool> simulateBackspace() async {
     if (!Platform.isWindows) return false;
-    try {
-      await keyPressSimulator.simulateKeyDown(PhysicalKeyboardKey.backspace, []);
-      await keyPressSimulator.simulateKeyUp(PhysicalKeyboardKey.backspace, []);
-      return true;
-    } catch (e) {
-      return false;
-    }
+    return _simulateKeyWithRetry(PhysicalKeyboardKey.backspace);
   }
   
   /// 模拟空格键
   static Future<bool> simulateSpace() async {
     if (!Platform.isWindows) return false;
-    try {
-      await keyPressSimulator.simulateKeyDown(PhysicalKeyboardKey.space, []);
-      await keyPressSimulator.simulateKeyUp(PhysicalKeyboardKey.space, []);
-      return true;
-    } catch (e) {
-      return false;
-    }
+    return _simulateKeyWithRetry(PhysicalKeyboardKey.space);
   }
   
   /// 模拟 Ctrl+A 全选后 Delete 清空
   static Future<bool> simulateClear() async {
     if (!Platform.isWindows) return false;
-    try {
-      // Ctrl+A 全选
-      await keyPressSimulator.simulateKeyDown(
-        PhysicalKeyboardKey.keyA,
-        [ModifierKey.controlModifier],
-      );
-      await keyPressSimulator.simulateKeyUp(
-        PhysicalKeyboardKey.keyA,
-        [ModifierKey.controlModifier],
-      );
-      // 短暂延迟
-      await Future.delayed(const Duration(milliseconds: 30));
-      // Delete 删除
-      await keyPressSimulator.simulateKeyDown(PhysicalKeyboardKey.delete, []);
-      await keyPressSimulator.simulateKeyUp(PhysicalKeyboardKey.delete, []);
-      return true;
-    } catch (e) {
-      return false;
-    }
+    return _simulateClearWithRetry();
   }
   
   /// 模拟回车键
   static Future<bool> simulateEnter() async {
     if (!Platform.isWindows) return false;
-    try {
-      await keyPressSimulator.simulateKeyDown(PhysicalKeyboardKey.enter, []);
-      await keyPressSimulator.simulateKeyUp(PhysicalKeyboardKey.enter, []);
-      return true;
-    } catch (e) {
-      return false;
-    }
+    return _simulateKeyWithRetry(PhysicalKeyboardKey.enter);
   }
   
   /// 模拟方向键
   static Future<bool> simulateArrow(PhysicalKeyboardKey key) async {
     if (!Platform.isWindows) return false;
-    try {
-      await keyPressSimulator.simulateKeyDown(key, []);
-      await keyPressSimulator.simulateKeyUp(key, []);
-      return true;
-    } catch (e) {
-      return false;
-    }
+    return _simulateKeyWithRetry(key);
   }
 
   /// 复制文本到剪切板
@@ -214,91 +248,32 @@ class ClipboardService {
   /// 模拟 Ctrl+C 复制操作（仅 Windows）
   static Future<bool> simulateCopy() async {
     if (!Platform.isWindows) return false;
-    try {
-      await keyPressSimulator.simulateKeyDown(
-        PhysicalKeyboardKey.keyC,
-        [ModifierKey.controlModifier],
-      );
-      await keyPressSimulator.simulateKeyUp(
-        PhysicalKeyboardKey.keyC,
-        [ModifierKey.controlModifier],
-      );
-      return true;
-    } catch (e) {
-      return false;
-    }
+    return _simulateModifierKeyWithRetry(PhysicalKeyboardKey.keyC, ModifierKey.controlModifier);
   }
   
   /// 模拟 Ctrl+V 粘贴操作（仅 Windows）
   static Future<bool> simulatePaste() async {
     if (!Platform.isWindows) return false;
-    try {
-      await Future.delayed(const Duration(milliseconds: 50));
-      await keyPressSimulator.simulateKeyDown(
-        PhysicalKeyboardKey.keyV,
-        [ModifierKey.controlModifier],
-      );
-      await keyPressSimulator.simulateKeyUp(
-        PhysicalKeyboardKey.keyV,
-        [ModifierKey.controlModifier],
-      );
-      return true;
-    } catch (e) {
-      return false;
-    }
+    // 粘贴前稍等，确保剪贴板数据已写入
+    await Future.delayed(const Duration(milliseconds: 50));
+    return _simulateModifierKeyWithRetry(PhysicalKeyboardKey.keyV, ModifierKey.controlModifier);
   }
   
   /// 模拟 Ctrl+X 剪切操作（仅 Windows）
   static Future<bool> simulateCut() async {
     if (!Platform.isWindows) return false;
-    try {
-      await keyPressSimulator.simulateKeyDown(
-        PhysicalKeyboardKey.keyX,
-        [ModifierKey.controlModifier],
-      );
-      await keyPressSimulator.simulateKeyUp(
-        PhysicalKeyboardKey.keyX,
-        [ModifierKey.controlModifier],
-      );
-      return true;
-    } catch (e) {
-      return false;
-    }
+    return _simulateModifierKeyWithRetry(PhysicalKeyboardKey.keyX, ModifierKey.controlModifier);
   }
   
   /// 模拟 Ctrl+Z 撤销操作（仅 Windows）
   static Future<bool> simulateUndo() async {
     if (!Platform.isWindows) return false;
-    try {
-      await keyPressSimulator.simulateKeyDown(
-        PhysicalKeyboardKey.keyZ,
-        [ModifierKey.controlModifier],
-      );
-      await keyPressSimulator.simulateKeyUp(
-        PhysicalKeyboardKey.keyZ,
-        [ModifierKey.controlModifier],
-      );
-      return true;
-    } catch (e) {
-      return false;
-    }
+    return _simulateModifierKeyWithRetry(PhysicalKeyboardKey.keyZ, ModifierKey.controlModifier);
   }
   
   /// 模拟 Ctrl+Y 重做操作（仅 Windows）
   static Future<bool> simulateRedo() async {
     if (!Platform.isWindows) return false;
-    try {
-      await keyPressSimulator.simulateKeyDown(
-        PhysicalKeyboardKey.keyY,
-        [ModifierKey.controlModifier],
-      );
-      await keyPressSimulator.simulateKeyUp(
-        PhysicalKeyboardKey.keyY,
-        [ModifierKey.controlModifier],
-      );
-      return true;
-    } catch (e) {
-      return false;
-    }
+    return _simulateModifierKeyWithRetry(PhysicalKeyboardKey.keyY, ModifierKey.controlModifier);
   }
 }

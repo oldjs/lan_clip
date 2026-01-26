@@ -60,6 +60,9 @@ dependencies:
   
   # 剪贴板图片读写
   pasteboard: ^0.4.0
+  
+  # FFI (用于 Windows API 调用)
+  ffi: ^2.1.0
 
 dev_dependencies:
   flutter_test:
