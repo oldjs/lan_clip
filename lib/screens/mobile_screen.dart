@@ -24,7 +24,7 @@ class MobileScreen extends StatefulWidget {
   State<MobileScreen> createState() => _MobileScreenState();
 }
 
-class _MobileScreenState extends State<MobileScreen> with WidgetsBindingObserver {
+class _MobileScreenState extends State<MobileScreen> {
   final _textController = TextEditingController();
   final _discoveryService = DiscoveryService();
   final _socketService = SocketService();
@@ -35,8 +35,6 @@ class _MobileScreenState extends State<MobileScreen> with WidgetsBindingObserver
   Device? _selectedDevice;
   bool _isSearching = false;
   bool _isSending = false;
-  String _statusMessage = '';
-  bool _isKeyboardVisible = false; // 键盘是否可见
   bool _receiveFromPc = false;     // 是否接收电脑剪贴板
   int _syncPort = 0;               // 剪贴板同步监听端口
   
@@ -56,7 +54,6 @@ class _MobileScreenState extends State<MobileScreen> with WidgetsBindingObserver
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this); // 监听键盘状态
     _loadSettings();
     
     _deviceSubscription = _discoveryService.deviceStream.listen((device) {
@@ -110,7 +107,6 @@ class _MobileScreenState extends State<MobileScreen> with WidgetsBindingObserver
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
     _textController.removeListener(_onTextChanged);
     _textController.dispose();
     _inputFocusNode.dispose();
@@ -121,18 +117,6 @@ class _MobileScreenState extends State<MobileScreen> with WidgetsBindingObserver
     _clipboardSyncService.dispose();
     _cancelAutoSendTimer();
     super.dispose();
-  }
-  
-  /// 监听键盘显示/隐藏
-  @override
-  void didChangeMetrics() {
-    final bottomInset = WidgetsBinding.instance.platformDispatcher.views.first.viewInsets.bottom;
-    final keyboardVisible = bottomInset > 0;
-    if (_isKeyboardVisible != keyboardVisible) {
-      setState(() {
-        _isKeyboardVisible = keyboardVisible;
-      });
-    }
   }
   
   /// 输入变化时的回调
@@ -234,7 +218,6 @@ class _MobileScreenState extends State<MobileScreen> with WidgetsBindingObserver
       _isSearching = true;
       _devices.clear();
       _selectedDevice = null;
-      _statusMessage = '正在搜索设备...';
     });
 
     // 携带同步端口(如果启用了接收功能)
@@ -247,8 +230,14 @@ class _MobileScreenState extends State<MobileScreen> with WidgetsBindingObserver
 
     setState(() {
       _isSearching = false;
-      _statusMessage = _devices.isEmpty ? '未发现设备' : '发现 ${_devices.length} 个设备';
     });
+    
+    // 用 SnackBar 通知搜索结果
+    if (_devices.isEmpty) {
+      _showSnackBar('未发现设备');
+    } else {
+      _showSnackBar('发现 ${_devices.length} 个设备');
+    }
   }
 
   /// 发送内容
@@ -283,7 +272,6 @@ class _MobileScreenState extends State<MobileScreen> with WidgetsBindingObserver
 
     setState(() {
       _isSending = true;
-      _statusMessage = '正在发送...';
     });
 
     final result = await _socketService.sendMessage(
@@ -295,7 +283,6 @@ class _MobileScreenState extends State<MobileScreen> with WidgetsBindingObserver
 
     setState(() {
       _isSending = false;
-      _statusMessage = result.success ? '发送成功' : '发送失败';
     });
 
     if (result.success) {
@@ -464,8 +451,11 @@ class _MobileScreenState extends State<MobileScreen> with WidgetsBindingObserver
 
   @override
   Widget build(BuildContext context) {
+    // 通过 MediaQuery 判断键盘是否可见，避免 setState 导致输入框失焦
+    final isKeyboardVisible = MediaQuery.of(context).viewInsets.bottom > 0;
+    
     // 判断是否显示悬浮发送按钮：键盘可见 + 有选中设备 + 输入框有内容
-    final showFloatingButton = _isKeyboardVisible && 
+    final showFloatingButton = isKeyboardVisible && 
         _selectedDevice != null && 
         _textController.text.trim().isNotEmpty;
     
@@ -508,7 +498,7 @@ class _MobileScreenState extends State<MobileScreen> with WidgetsBindingObserver
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             // 设备选择区域 - 键盘弹出时隐藏
-            if (!_isKeyboardVisible)
+            if (!isKeyboardVisible)
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(16.0),
@@ -576,10 +566,10 @@ class _MobileScreenState extends State<MobileScreen> with WidgetsBindingObserver
                   ),
                 ),
               ),
-            if (!_isKeyboardVisible) const SizedBox(height: 12),
+            if (!isKeyboardVisible) const SizedBox(height: 12),
             
             // 自动发送设置 - 键盘弹出时隐藏
-            if (!_isKeyboardVisible)
+            if (!isKeyboardVisible)
               Card(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
@@ -634,10 +624,10 @@ class _MobileScreenState extends State<MobileScreen> with WidgetsBindingObserver
                   ),
                 ),
               ),
-            if (!_isKeyboardVisible) const SizedBox(height: 12),
+            if (!isKeyboardVisible) const SizedBox(height: 12),
             
             // 接收电脑剪贴板设置 - 键盘弹出时隐藏
-            if (!_isKeyboardVisible)
+            if (!isKeyboardVisible)
               Card(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
@@ -669,7 +659,7 @@ class _MobileScreenState extends State<MobileScreen> with WidgetsBindingObserver
                   ),
                 ),
               ),
-            if (!_isKeyboardVisible) const SizedBox(height: 12),
+            if (!isKeyboardVisible) const SizedBox(height: 12),
             
             // 输入区域
             Expanded(
@@ -692,7 +682,7 @@ class _MobileScreenState extends State<MobileScreen> with WidgetsBindingObserver
             ),
             
             // 键盘弹出时隐藏下方的快捷按钮，只保留倒计时提示
-            if (!_isKeyboardVisible) ...[
+            if (!isKeyboardVisible) ...[
               const SizedBox(height: 12),
               
               // 快捷操作按钮 - 第一行
@@ -754,7 +744,7 @@ class _MobileScreenState extends State<MobileScreen> with WidgetsBindingObserver
               const SizedBox(height: 12),
             ],
             
-            // 状态信息（倒计时或普通状态）- 始终显示
+            // 自动发送倒计时提示
             if (_countdownSeconds > 0)
               Padding(
                 padding: const EdgeInsets.only(bottom: 8.0),
@@ -788,19 +778,10 @@ class _MobileScreenState extends State<MobileScreen> with WidgetsBindingObserver
                     ),
                   ],
                 ),
-              )
-            else if (_statusMessage.isNotEmpty && !_isKeyboardVisible)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8.0),
-                child: Text(
-                  _statusMessage,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.grey[600]),
-                ),
               ),
             
             // 发送按钮 - 键盘弹出时隐藏（由悬浮按钮替代）
-            if (!_isKeyboardVisible)
+            if (!isKeyboardVisible)
               SizedBox(
                 height: 50,
                 child: ElevatedButton.icon(
