@@ -48,7 +48,7 @@ class _MobileScreenState extends State<MobileScreen> {
   
   // 自动发送相关状态
   bool _autoSendEnabled = false;
-  int _autoSendDelay = 3; // 默认3秒
+  double _autoSendDelay = 3.0; // 默认3秒，支持小数
   Timer? _autoSendTimer;
   int _countdownSeconds = 0; // 倒计时剩余秒数
   Timer? _countdownTimer; // 倒计时显示定时器
@@ -95,7 +95,7 @@ class _MobileScreenState extends State<MobileScreen> {
     
     setState(() {
       _autoSendEnabled = prefs.getBool(_autoSendEnabledKey) ?? false;
-      _autoSendDelay = prefs.getInt(_autoSendDelayKey) ?? 3;
+      _autoSendDelay = prefs.getDouble(_autoSendDelayKey) ?? 3.0;
       _receiveFromPc = receiveFromPc;
     });
     
@@ -109,7 +109,7 @@ class _MobileScreenState extends State<MobileScreen> {
   Future<void> _saveAutoSendSettings() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_autoSendEnabledKey, _autoSendEnabled);
-    await prefs.setInt(_autoSendDelayKey, _autoSendDelay);
+    await prefs.setDouble(_autoSendDelayKey, _autoSendDelay);
   }
 
   @override
@@ -134,14 +134,14 @@ class _MobileScreenState extends State<MobileScreen> {
     // 取消之前的计时器
     _cancelAutoSendTimer();
     
-    final content = _textController.text.trim();
+    final content = _textController.text.trimRight();
     // 内容为空或没有选择设备，不启动计时
-    if (content.isEmpty || _selectedDevice == null || _isSending) {
+    if (content.trim().isEmpty || _selectedDevice == null || _isSending) {
       return;
     }
     
     // 启动倒计时
-    _countdownSeconds = _autoSendDelay;
+    _countdownSeconds = _autoSendDelay.ceil();
     setState(() {});
     
     // 每秒更新倒计时显示
@@ -154,8 +154,8 @@ class _MobileScreenState extends State<MobileScreen> {
       }
     });
     
-    // 延迟后发送
-    _autoSendTimer = Timer(Duration(seconds: _autoSendDelay), () {
+    // 延迟后发送（支持小数秒）
+    _autoSendTimer = Timer(Duration(milliseconds: (_autoSendDelay * 1000).toInt()), () {
       _countdownTimer?.cancel();
       setState(() {
         _countdownSeconds = 0;
@@ -245,11 +245,13 @@ class _MobileScreenState extends State<MobileScreen> {
       return;
     }
 
-    final content = _textController.text.trim();
-    if (content.isEmpty) {
+    // 检查是否有内容（trim判断），但发送时保留头部空格（只trimRight）
+    final text = _textController.text;
+    if (text.trim().isEmpty) {
       _showSnackBar('请输入要发送的内容');
       return;
     }
+    final content = text.trimRight();
 
     // 如果设备需要密码，先检查是否已有缓存的密码
     String? passwordHash;
@@ -658,14 +660,14 @@ class _MobileScreenState extends State<MobileScreen> {
                                 const Text('延迟时间: '),
                                 Expanded(
                                   child: Slider(
-                                    value: _autoSendDelay.toDouble(),
-                                    min: 1,
+                                    value: _autoSendDelay,
+                                    min: 0.5,
                                     max: 10,
-                                    divisions: 9,
-                                    label: '$_autoSendDelay 秒',
+                                    divisions: 19,
+                                    label: '${_autoSendDelay.toStringAsFixed(1)} 秒',
                                     onChanged: (value) {
                                       setState(() {
-                                        _autoSendDelay = value.round();
+                                        _autoSendDelay = double.parse(value.toStringAsFixed(1));
                                       });
                                       _cancelAutoSendTimer();
                                     },
@@ -674,7 +676,7 @@ class _MobileScreenState extends State<MobileScreen> {
                                     },
                                   ),
                                 ),
-                                Text('$_autoSendDelay 秒'),
+                                Text('${_autoSendDelay.toStringAsFixed(1)} 秒'),
                               ],
                             ),
                           ],
@@ -757,7 +759,7 @@ class _MobileScreenState extends State<MobileScreen> {
                           ),
                           const SizedBox(width: 8),
                           Text(
-                            '$_countdownSeconds 秒后自动发送...',
+                            '${_autoSendDelay.toStringAsFixed(1)}秒后发送($_countdownSeconds)...',
                             style: const TextStyle(color: Colors.blue),
                           ),
                           const SizedBox(width: 8),

@@ -33,7 +33,7 @@ class _SimpleInputScreenState extends State<SimpleInputScreen> {
   
   // 自动发送相关状态
   bool _autoSendEnabled = false;
-  int _autoSendDelay = 3;
+  double _autoSendDelay = 3.0;
   Timer? _autoSendTimer;
   int _countdownSeconds = 0;
   Timer? _countdownTimer;
@@ -55,7 +55,7 @@ class _SimpleInputScreenState extends State<SimpleInputScreen> {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
       _autoSendEnabled = prefs.getBool(_autoSendEnabledKey) ?? false;
-      _autoSendDelay = prefs.getInt(_autoSendDelayKey) ?? 3;
+      _autoSendDelay = prefs.getDouble(_autoSendDelayKey) ?? 3.0;
     });
   }
 
@@ -75,11 +75,11 @@ class _SimpleInputScreenState extends State<SimpleInputScreen> {
     
     _cancelAutoSendTimer();
     
-    final content = _textController.text.trim();
-    if (content.isEmpty || _isSending) return;
+    final content = _textController.text.trimRight();
+    if (content.trim().isEmpty || _isSending) return;
     
     // 启动倒计时
-    _countdownSeconds = _autoSendDelay;
+    _countdownSeconds = _autoSendDelay.ceil();
     setState(() {});
     
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
@@ -91,7 +91,8 @@ class _SimpleInputScreenState extends State<SimpleInputScreen> {
       }
     });
     
-    _autoSendTimer = Timer(Duration(seconds: _autoSendDelay), () {
+    // 支持小数秒延迟
+    _autoSendTimer = Timer(Duration(milliseconds: (_autoSendDelay * 1000).toInt()), () {
       _countdownTimer?.cancel();
       setState(() {
         _countdownSeconds = 0;
@@ -115,11 +116,13 @@ class _SimpleInputScreenState extends State<SimpleInputScreen> {
 
   /// 发送内容
   Future<void> _sendContent() async {
-    final content = _textController.text.trim();
-    if (content.isEmpty) {
+    // 检查是否有内容（trim判断），但发送时保留头部空格（只trimRight）
+    final text = _textController.text;
+    if (text.trim().isEmpty) {
       _showSnackBar('请输入要发送的内容');
       return;
     }
+    final content = text.trimRight();
 
     setState(() {
       _isSending = true;
@@ -187,7 +190,7 @@ class _SimpleInputScreenState extends State<SimpleInputScreen> {
                     ),
                     const SizedBox(width: 8),
                     Text(
-                      '$_countdownSeconds 秒后自动发送...',
+                      '${_autoSendDelay.toStringAsFixed(1)}秒后发送($_countdownSeconds)...',
                       style: const TextStyle(color: Colors.blue),
                     ),
                     const SizedBox(width: 8),

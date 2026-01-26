@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/device.dart';
 import '../services/socket_service.dart';
+import '../services/clipboard_service.dart' show cmdCopy, cmdPaste, cmdCut, cmdUndo, cmdRedo;
 
 /// 触摸板屏幕 - 手机端控制电脑鼠标
 class TouchpadScreen extends StatefulWidget {
@@ -229,42 +230,97 @@ class _TouchpadScreenState extends State<TouchpadScreen> {
   /// 底部功能按钮
   Widget _buildBottomButtons() {
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 40),
-      height: 140,
-      child: Row(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          // 左键
-          Expanded(
-            flex: 2,
-            child: _buildActionButton(
-              '左键',
-              () => _sendCommand('CMD:MOUSE_LEFT_CLICK'),
-              onLongPress: () => _sendCommand('CMD:MOUSE_LEFT_DOWN'),
-              onLongPressEnd: () => _sendCommand('CMD:MOUSE_LEFT_UP'),
-            ),
-          ),
-          const SizedBox(width: 12),
-          // 滚轮上下按钮（触碰即触发）
-          Expanded(
-            flex: 1,
-            child: Column(
+          // 快捷键按钮行：复制、粘贴、剪切、撤销、重做
+          SizedBox(
+            height: 40,
+            child: Row(
               children: [
-                Expanded(child: _buildScrollButton(isUp: true)),
-                const SizedBox(height: 8),
-                Expanded(child: _buildScrollButton(isUp: false)),
+                Expanded(child: _buildSmallButton('复制', cmdCopy, Icons.copy)),
+                const SizedBox(width: 6),
+                Expanded(child: _buildSmallButton('粘贴', cmdPaste, Icons.paste)),
+                const SizedBox(width: 6),
+                Expanded(child: _buildSmallButton('剪切', cmdCut, Icons.content_cut)),
+                const SizedBox(width: 6),
+                Expanded(child: _buildSmallButton('撤销', cmdUndo, Icons.undo)),
+                const SizedBox(width: 6),
+                Expanded(child: _buildSmallButton('重做', cmdRedo, Icons.redo)),
               ],
             ),
           ),
-          const SizedBox(width: 12),
-          // 右键
-          Expanded(
-            flex: 2,
-            child: _buildActionButton(
-              '右键',
-              () => _sendCommand('CMD:MOUSE_RIGHT_CLICK'),
+          const SizedBox(height: 12),
+          // 鼠标按钮行
+          SizedBox(
+            height: 100,
+            child: Row(
+              children: [
+                // 左键
+                Expanded(
+                  flex: 2,
+                  child: _buildActionButton(
+                    '左键',
+                    () => _sendCommand('CMD:MOUSE_LEFT_CLICK'),
+                    onLongPress: () => _sendCommand('CMD:MOUSE_LEFT_DOWN'),
+                    onLongPressEnd: () => _sendCommand('CMD:MOUSE_LEFT_UP'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                // 滚轮上下按钮
+                Expanded(
+                  flex: 1,
+                  child: Column(
+                    children: [
+                      Expanded(child: _buildScrollButton(isUp: true)),
+                      const SizedBox(height: 8),
+                      Expanded(child: _buildScrollButton(isUp: false)),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                // 右键
+                Expanded(
+                  flex: 2,
+                  child: _buildActionButton(
+                    '右键',
+                    () => _sendCommand('CMD:MOUSE_RIGHT_CLICK'),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
+      ),
+    );
+  }
+  
+  /// 小型快捷键按钮（带图标）
+  Widget _buildSmallButton(String label, String command, IconData icon) {
+    return GestureDetector(
+      onTap: () => _sendCommand(command),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.cyanAccent.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.cyanAccent.withOpacity(0.3)),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, color: Colors.cyanAccent, size: 16),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              style: const TextStyle(
+                color: Colors.cyanAccent,
+                fontSize: 10,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

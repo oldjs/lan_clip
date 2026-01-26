@@ -22,6 +22,13 @@ const String cmdMouseLeftDown = '${cmdPrefix}MOUSE_LEFT_DOWN';
 const String cmdMouseLeftUp = '${cmdPrefix}MOUSE_LEFT_UP';
 const String cmdMouseScroll = '${cmdPrefix}MOUSE_SCROLL';
 
+// 快捷键指令
+const String cmdCopy = '${cmdPrefix}COPY';      // Ctrl+C
+const String cmdPaste = '${cmdPrefix}PASTE';    // Ctrl+V
+const String cmdCut = '${cmdPrefix}CUT';        // Ctrl+X
+const String cmdUndo = '${cmdPrefix}UNDO';      // Ctrl+Z
+const String cmdRedo = '${cmdPrefix}REDO';      // Ctrl+Y
+
 /// 剪切板服务
 class ClipboardService {
   /// 判断是否为控制指令
@@ -78,6 +85,22 @@ class ClipboardService {
         return null;
       case cmdMouseLeftUp:
         MouseService().leftUp();
+        return null;
+      // 快捷键指令
+      case cmdCopy:
+        await simulateCopy();
+        return null;
+      case cmdPaste:
+        await simulatePaste();
+        return null;
+      case cmdCut:
+        await simulateCut();
+        return null;
+      case cmdUndo:
+        await simulateUndo();
+        return null;
+      case cmdRedo:
+        await simulateRedo();
         return null;
       default:
         return null;
@@ -188,26 +211,91 @@ class ClipboardService {
     return data?.text;
   }
 
+  /// 模拟 Ctrl+C 复制操作（仅 Windows）
+  static Future<bool> simulateCopy() async {
+    if (!Platform.isWindows) return false;
+    try {
+      await keyPressSimulator.simulateKeyDown(
+        PhysicalKeyboardKey.keyC,
+        [ModifierKey.controlModifier],
+      );
+      await keyPressSimulator.simulateKeyUp(
+        PhysicalKeyboardKey.keyC,
+        [ModifierKey.controlModifier],
+      );
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+  
   /// 模拟 Ctrl+V 粘贴操作（仅 Windows）
   static Future<bool> simulatePaste() async {
     if (!Platform.isWindows) return false;
-    
     try {
-      // 短暂延迟确保剪切板已写入
       await Future.delayed(const Duration(milliseconds: 50));
-      
-      // 模拟按下 Ctrl+V
       await keyPressSimulator.simulateKeyDown(
         PhysicalKeyboardKey.keyV,
         [ModifierKey.controlModifier],
       );
-      
-      // 模拟释放 Ctrl+V
       await keyPressSimulator.simulateKeyUp(
         PhysicalKeyboardKey.keyV,
         [ModifierKey.controlModifier],
       );
-      
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+  
+  /// 模拟 Ctrl+X 剪切操作（仅 Windows）
+  static Future<bool> simulateCut() async {
+    if (!Platform.isWindows) return false;
+    try {
+      await keyPressSimulator.simulateKeyDown(
+        PhysicalKeyboardKey.keyX,
+        [ModifierKey.controlModifier],
+      );
+      await keyPressSimulator.simulateKeyUp(
+        PhysicalKeyboardKey.keyX,
+        [ModifierKey.controlModifier],
+      );
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+  
+  /// 模拟 Ctrl+Z 撤销操作（仅 Windows）
+  static Future<bool> simulateUndo() async {
+    if (!Platform.isWindows) return false;
+    try {
+      await keyPressSimulator.simulateKeyDown(
+        PhysicalKeyboardKey.keyZ,
+        [ModifierKey.controlModifier],
+      );
+      await keyPressSimulator.simulateKeyUp(
+        PhysicalKeyboardKey.keyZ,
+        [ModifierKey.controlModifier],
+      );
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+  
+  /// 模拟 Ctrl+Y 重做操作（仅 Windows）
+  static Future<bool> simulateRedo() async {
+    if (!Platform.isWindows) return false;
+    try {
+      await keyPressSimulator.simulateKeyDown(
+        PhysicalKeyboardKey.keyY,
+        [ModifierKey.controlModifier],
+      );
+      await keyPressSimulator.simulateKeyUp(
+        PhysicalKeyboardKey.keyY,
+        [ModifierKey.controlModifier],
+      );
       return true;
     } catch (e) {
       return false;

@@ -43,6 +43,7 @@ class _DesktopScreenState extends State<DesktopScreen>
   StreamSubscription<AuthResult>? _messageSubscription;
   StreamSubscription<Device>? _connectedDeviceSubscription;
   StreamSubscription<ClipboardContent>? _clipboardSubscription;
+  Timer? _keepAliveTimer;  // 保活定时器，防止窗口失焦时事件循环被降低优先级
   
   // 设置项的存储键
   static const String _autoPasteKey = 'auto_paste_enabled';
@@ -100,7 +101,6 @@ class _DesktopScreenState extends State<DesktopScreen>
         await launchAtStartup.disable();
       }
       setState(() => _launchAtStartup = value);
-      _showSnackBar(value ? '已启用开机自启' : '已关闭开机自启');
     } catch (e) {
       _showSnackBar('设置失败: $e');
     }
@@ -111,11 +111,11 @@ class _DesktopScreenState extends State<DesktopScreen>
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(startHiddenKey, value);
     setState(() => _startHidden = value);
-    _showSnackBar(value ? '下次启动将自动隐藏到托盘' : '下次启动将显示窗口');
   }
 
   @override
   void dispose() {
+    _keepAliveTimer?.cancel();
     trayManager.removeListener(this);
     windowManager.removeListener(this);
     _messageSubscription?.cancel();
@@ -199,6 +199,9 @@ class _DesktopScreenState extends State<DesktopScreen>
 
       setState(() => _isRunning = true);
       
+      // 启动保活定时器，防止窗口失焦时 Dart 事件循环被降低优先级
+      _startKeepAliveTimer();
+      
       // 更新托盘提示
       if (Platform.isWindows) {
         await trayManager.setToolTip('LAN Clip - 运行中 ($_localIp)');
@@ -206,6 +209,16 @@ class _DesktopScreenState extends State<DesktopScreen>
     } catch (e) {
       _showSnackBar('服务启动失败: $e');
     }
+  }
+  
+  /// 启动保活定时器
+  /// Flutter Windows 在窗口失焦时会降低事件循环优先级，导致 TCP 消息处理延迟
+  /// 通过定期触发空操作来保持事件循环活跃
+  void _startKeepAliveTimer() {
+    _keepAliveTimer?.cancel();
+    _keepAliveTimer = Timer.periodic(const Duration(milliseconds: 100), (_) {
+      // 空操作，仅用于保持事件循环活跃
+    });
   }
   
   /// 设置密码保护
@@ -217,14 +230,12 @@ class _DesktopScreenState extends State<DesktopScreen>
         await AuthService.setPassword(password);
         setState(() => _passwordEnabled = true);
         _updatePasswordSettings();
-        _showSnackBar('密码已设置');
       }
     } else {
       // 关闭密码
       await AuthService.clearPassword();
       setState(() => _passwordEnabled = false);
       _updatePasswordSettings();
-      _showSnackBar('密码保护已关闭');
     }
   }
   
@@ -324,10 +335,7 @@ class _DesktopScreenState extends State<DesktopScreen>
 
     // 自动粘贴功能
     if (_autoPaste) {
-      final success = await ClipboardService.simulatePaste();
-      _showSnackBar(success ? '已自动粘贴' : '已复制到剪切板');
-    } else {
-      _showSnackBar('已复制到剪切板');
+      await ClipboardService.simulatePaste();
     }
   }
 
@@ -364,9 +372,7 @@ class _DesktopScreenState extends State<DesktopScreen>
     // 推送到所有已连接的手机
     await _socketService.pushClipboardToDevices(_connectedDevices, content);
     
-    // 显示同步提示
-    final typeStr = content.type == ClipboardDataType.text ? '文本' : '图片';
-    _showSnackBar('已同步$typeStr到 ${_connectedDevices.length} 台手机');
+    // 同步完成，不显示提示
   }
   
   /// 设置同步到手机开关
@@ -378,10 +384,8 @@ class _DesktopScreenState extends State<DesktopScreen>
     
     if (value) {
       await _clipboardWatcher.startWatching();
-      _showSnackBar('已开启剪贴板同步到手机');
     } else {
       await _clipboardWatcher.stopWatching();
-      _showSnackBar('已关闭剪贴板同步');
     }
   }
 
@@ -683,7 +687,6 @@ class _DesktopScreenState extends State<DesktopScreen>
                                 icon: const Icon(Icons.copy),
                                 onPressed: () async {
                                   await ClipboardService.copy(msg.content);
-                                  _showSnackBar('已复制');
                                 },
                               ),
                               onTap: () => _showMessageDetail(msg),
@@ -730,7 +733,6 @@ class _DesktopScreenState extends State<DesktopScreen>
               await ClipboardService.copy(msg.content);
               if (mounted) {
                 navigator.pop();
-                _showSnackBar('已复制');
               }
             },
             child: const Text('复制'),
