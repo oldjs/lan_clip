@@ -10,6 +10,7 @@ import '../services/clipboard_service.dart' show cmdBackspace, cmdSpace, cmdClea
 import '../services/clipboard_sync_service.dart';
 import '../services/mobile_clipboard_helper.dart';
 import 'touchpad_screen.dart';
+import 'simple_input_screen.dart';
 
 // 自动发送设置的存储键
 const String _autoSendEnabledKey = 'auto_send_enabled';
@@ -431,6 +432,24 @@ class _MobileScreenState extends State<MobileScreen> {
     );
   }
   
+  /// 打开简洁输入页面
+  void _openSimpleInput() {
+    if (_selectedDevice == null) return;
+    
+    final deviceKey = '${_selectedDevice!.ip}:${_selectedDevice!.port}';
+    final passwordHash = _devicePasswords[deviceKey];
+    
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => SimpleInputScreen(
+          device: _selectedDevice!,
+          passwordHash: passwordHash,
+        ),
+      ),
+    );
+  }
+  
   /// 构建方向键按钮
   Widget _buildArrowButton(IconData icon, String command, String label) {
     return SizedBox(
@@ -451,19 +470,17 @@ class _MobileScreenState extends State<MobileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // 通过 MediaQuery 判断键盘是否可见，避免 setState 导致输入框失焦
-    final isKeyboardVisible = MediaQuery.of(context).viewInsets.bottom > 0;
-    
-    // 判断是否显示悬浮发送按钮：键盘可见 + 有选中设备 + 输入框有内容
-    final showFloatingButton = isKeyboardVisible && 
-        _selectedDevice != null && 
-        _textController.text.trim().isNotEmpty;
-    
     return Scaffold(
       appBar: AppBar(
         title: const Text('LAN Clip - 发送端'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         actions: [
+          // 简洁输入页面入口
+          IconButton(
+            icon: const Icon(Icons.edit_note),
+            tooltip: '简洁输入',
+            onPressed: _selectedDevice == null ? null : _openSimpleInput,
+          ),
           // 触摸板入口按钮
           IconButton(
             icon: const Icon(Icons.touch_app),
@@ -472,336 +489,317 @@ class _MobileScreenState extends State<MobileScreen> {
           ),
         ],
       ),
-      // 悬浮发送按钮 - 键盘弹出时显示
-      floatingActionButton: showFloatingButton
-          ? FloatingActionButton.extended(
-              onPressed: _isSending ? null : _sendContent,
-              icon: _isSending
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
-                  : const Icon(Icons.send),
-              label: Text(_isSending ? '发送中' : '发送'),
-              backgroundColor: Theme.of(context).colorScheme.primary,
-              foregroundColor: Colors.white,
-            )
-          : null,
-      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // 设备选择区域 - 键盘弹出时隐藏
-            if (!isKeyboardVisible)
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      // 使用默认的 resizeToAvoidBottomInset: true，让 Flutter 自动调整
+      body: Column(
+        children: [
+          // 主内容区域 - 可滚动，widget 树结构保持不变
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // 设备选择区域
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text('目标设备', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                          ElevatedButton.icon(
-                            onPressed: _isSearching ? null : _searchDevices,
-                            icon: _isSearching
-                                ? const SizedBox(
-                                    width: 16,
-                                    height: 16,
-                                    child: CircularProgressIndicator(strokeWidth: 2),
-                                  )
-                                : const Icon(Icons.search),
-                            label: Text(_isSearching ? '搜索中' : '搜索'),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      // 提示信息
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: Colors.orange.shade50,
-                          borderRadius: BorderRadius.circular(4),
-                          border: Border.all(color: Colors.orange.shade200),
-                        ),
-                        child: const Row(
-                          children: [
-                            Icon(Icons.info_outline, size: 16, color: Colors.orange),
-                            SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                '请先在电脑上打开 LAN Clip，再点击搜索',
-                                style: TextStyle(color: Colors.orange, fontSize: 12),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text('目标设备', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                              ElevatedButton.icon(
+                                onPressed: _isSearching ? null : _searchDevices,
+                                icon: _isSearching
+                                    ? const SizedBox(
+                                        width: 16,
+                                        height: 16,
+                                        child: CircularProgressIndicator(strokeWidth: 2),
+                                      )
+                                    : const Icon(Icons.search),
+                                label: Text(_isSearching ? '搜索中' : '搜索'),
                               ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      if (_devices.isEmpty)
-                        const Text('点击搜索按钮发现局域网内的设备', style: TextStyle(color: Colors.grey))
-                      else
-                        DropdownButton<Device>(
-                          isExpanded: true,
-                          value: _selectedDevice,
-                          hint: const Text('选择设备'),
-                          items: _devices.map((device) {
-                            return DropdownMenuItem<Device>(
-                              value: device,
-                              child: Text(device.toString()),
-                            );
-                          }).toList(),
-                          onChanged: (device) {
-                            setState(() => _selectedDevice = device);
-                          },
-                        ),
-                    ],
-                  ),
-                ),
-              ),
-            if (!isKeyboardVisible) const SizedBox(height: 12),
-            
-            // 自动发送设置 - 键盘弹出时隐藏
-            if (!isKeyboardVisible)
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                  child: Column(
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text('停止输入后自动发送'),
-                          Switch(
-                            value: _autoSendEnabled,
-                            onChanged: (value) {
-                              setState(() {
-                                _autoSendEnabled = value;
-                                if (!value) {
-                                  _cancelAutoSendTimer();
-                                }
-                              });
-                              _saveAutoSendSettings();
-                            },
+                            ],
                           ),
+                          const SizedBox(height: 12),
+                          // 提示信息
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.orange.shade50,
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(color: Colors.orange.shade200),
+                            ),
+                            child: const Row(
+                              children: [
+                                Icon(Icons.info_outline, size: 16, color: Colors.orange),
+                                SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    '请先在电脑上打开 LAN Clip，再点击搜索',
+                                    style: TextStyle(color: Colors.orange, fontSize: 12),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          if (_devices.isEmpty)
+                            const Text('点击搜索按钮发现局域网内的设备', style: TextStyle(color: Colors.grey))
+                          else
+                            DropdownButton<Device>(
+                              isExpanded: true,
+                              value: _selectedDevice,
+                              hint: const Text('选择设备'),
+                              items: _devices.map((device) {
+                                return DropdownMenuItem<Device>(
+                                  value: device,
+                                  child: Text(device.toString()),
+                                );
+                              }).toList(),
+                              onChanged: (device) {
+                                setState(() => _selectedDevice = device);
+                              },
+                            ),
                         ],
                       ),
-                      // 延迟时间设置（仅在启用时显示）
-                      if (_autoSendEnabled) ...[
-                        Row(
-                          children: [
-                            const Text('延迟时间: '),
-                            Expanded(
-                              child: Slider(
-                                value: _autoSendDelay.toDouble(),
-                                min: 1,
-                                max: 10,
-                                divisions: 9,
-                                label: '$_autoSendDelay 秒',
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  
+                  // 自动发送设置
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                      child: Column(
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text('停止输入后自动发送'),
+                              Switch(
+                                value: _autoSendEnabled,
                                 onChanged: (value) {
                                   setState(() {
-                                    _autoSendDelay = value.round();
+                                    _autoSendEnabled = value;
+                                    if (!value) {
+                                      _cancelAutoSendTimer();
+                                    }
                                   });
-                                  _cancelAutoSendTimer();
-                                },
-                                onChangeEnd: (value) {
                                   _saveAutoSendSettings();
                                 },
                               ),
+                            ],
+                          ),
+                          // 延迟时间设置（仅在启用时显示）
+                          if (_autoSendEnabled) ...[
+                            Row(
+                              children: [
+                                const Text('延迟时间: '),
+                                Expanded(
+                                  child: Slider(
+                                    value: _autoSendDelay.toDouble(),
+                                    min: 1,
+                                    max: 10,
+                                    divisions: 9,
+                                    label: '$_autoSendDelay 秒',
+                                    onChanged: (value) {
+                                      setState(() {
+                                        _autoSendDelay = value.round();
+                                      });
+                                      _cancelAutoSendTimer();
+                                    },
+                                    onChangeEnd: (value) {
+                                      _saveAutoSendSettings();
+                                    },
+                                  ),
+                                ),
+                                Text('$_autoSendDelay 秒'),
+                              ],
                             ),
-                            Text('$_autoSendDelay 秒'),
                           ],
-                        ),
-                      ],
-                    ],
+                        ],
+                      ),
+                    ),
                   ),
-                ),
-              ),
-            if (!isKeyboardVisible) const SizedBox(height: 12),
-            
-            // 接收电脑剪贴板设置 - 键盘弹出时隐藏
-            if (!isKeyboardVisible)
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text('接收电脑剪贴板'),
-                            Text(
-                              _receiveFromPc 
-                                  ? '已启用 (监听端口: $_syncPort)' 
-                                  : '关闭时无法接收电脑复制的内容',
+                  const SizedBox(height: 12),
+                  
+                  // 接收电脑剪贴板设置
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text('接收电脑剪贴板'),
+                                Text(
+                                  _receiveFromPc 
+                                      ? '已启用 (监听端口: $_syncPort)' 
+                                      : '关闭时无法接收电脑复制的内容',
+                                  style: TextStyle(
+                                    color: _receiveFromPc ? Colors.green : Colors.grey,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Switch(
+                            value: _receiveFromPc,
+                            onChanged: _setReceiveFromPc,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  
+                  // 输入区域 - 固定高度，避免布局变化
+                  SizedBox(
+                    height: 150,
+                    child: Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: TextField(
+                          controller: _textController,
+                          focusNode: _inputFocusNode,
+                          maxLines: null,
+                          expands: true,
+                          textAlignVertical: TextAlignVertical.top,
+                          decoration: const InputDecoration(
+                            hintText: '输入要发送到电脑剪切板的内容...',
+                            border: InputBorder.none,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  
+                  // 自动发送倒计时提示
+                  if (_countdownSeconds > 0)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8.0),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              value: _countdownSeconds / _autoSendDelay,
+                              color: Colors.blue,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            '$_countdownSeconds 秒后自动发送...',
+                            style: const TextStyle(color: Colors.blue),
+                          ),
+                          const SizedBox(width: 8),
+                          GestureDetector(
+                            onTap: _cancelAutoSendTimer,
+                            child: const Text(
+                              '取消',
                               style: TextStyle(
-                                color: _receiveFromPc ? Colors.green : Colors.grey,
-                                fontSize: 12,
+                                color: Colors.red,
+                                decoration: TextDecoration.underline,
                               ),
                             ),
-                          ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  const SizedBox(height: 12),
+                  
+                  // 快捷操作按钮 - 第一行
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildCommandButton(
+                          icon: Icons.backspace_outlined,
+                          label: '退格',
+                          command: cmdBackspace,
                         ),
                       ),
-                      Switch(
-                        value: _receiveFromPc,
-                        onChanged: _setReceiveFromPc,
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: _buildCommandButton(
+                          icon: Icons.space_bar,
+                          label: '空格',
+                          command: cmdSpace,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: _buildCommandButton(
+                          icon: Icons.keyboard_return,
+                          label: '回车',
+                          command: cmdEnter,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: _buildCommandButton(
+                          icon: Icons.clear_all,
+                          label: '清空',
+                          command: cmdClear,
+                          color: Colors.red,
+                        ),
                       ),
                     ],
                   ),
-                ),
-              ),
-            if (!isKeyboardVisible) const SizedBox(height: 12),
-            
-            // 输入区域
-            Expanded(
-              child: Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: TextField(
-                    controller: _textController,
-                    focusNode: _inputFocusNode,
-                    maxLines: null,
-                    expands: true,
-                    textAlignVertical: TextAlignVertical.top,
-                    decoration: const InputDecoration(
-                      hintText: '输入要发送到电脑剪切板的内容...',
-                      border: InputBorder.none,
+                  const SizedBox(height: 8),
+                  
+                  // 快捷操作按钮 - 方向键
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      _buildArrowButton(Icons.keyboard_arrow_left, cmdArrowLeft, '左'),
+                      const SizedBox(width: 4),
+                      Column(
+                        children: [
+                          _buildArrowButton(Icons.keyboard_arrow_up, cmdArrowUp, '上'),
+                          const SizedBox(height: 4),
+                          _buildArrowButton(Icons.keyboard_arrow_down, cmdArrowDown, '下'),
+                        ],
+                      ),
+                      const SizedBox(width: 4),
+                      _buildArrowButton(Icons.keyboard_arrow_right, cmdArrowRight, '右'),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  
+                  // 发送按钮
+                  SizedBox(
+                    height: 50,
+                    child: ElevatedButton.icon(
+                      onPressed: (_isSending || _selectedDevice == null) ? null : _sendContent,
+                      icon: _isSending
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.send),
+                      label: Text(_isSending ? '发送中...' : '发送到电脑'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Theme.of(context).colorScheme.primary,
+                        foregroundColor: Colors.white,
+                      ),
                     ),
                   ),
-                ),
+                ],
               ),
             ),
-            
-            // 键盘弹出时隐藏下方的快捷按钮，只保留倒计时提示
-            if (!isKeyboardVisible) ...[
-              const SizedBox(height: 12),
-              
-              // 快捷操作按钮 - 第一行
-              Row(
-                children: [
-                  Expanded(
-                    child: _buildCommandButton(
-                      icon: Icons.backspace_outlined,
-                      label: '退格',
-                      command: cmdBackspace,
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: _buildCommandButton(
-                      icon: Icons.space_bar,
-                      label: '空格',
-                      command: cmdSpace,
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: _buildCommandButton(
-                      icon: Icons.keyboard_return,
-                      label: '回车',
-                      command: cmdEnter,
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: _buildCommandButton(
-                      icon: Icons.clear_all,
-                      label: '清空',
-                      command: cmdClear,
-                      color: Colors.red,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              
-              // 快捷操作按钮 - 方向键
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  _buildArrowButton(Icons.keyboard_arrow_left, cmdArrowLeft, '左'),
-                  const SizedBox(width: 4),
-                  Column(
-                    children: [
-                      _buildArrowButton(Icons.keyboard_arrow_up, cmdArrowUp, '上'),
-                      const SizedBox(height: 4),
-                      _buildArrowButton(Icons.keyboard_arrow_down, cmdArrowDown, '下'),
-                    ],
-                  ),
-                  const SizedBox(width: 4),
-                  _buildArrowButton(Icons.keyboard_arrow_right, cmdArrowRight, '右'),
-                ],
-              ),
-              const SizedBox(height: 12),
-            ],
-            
-            // 自动发送倒计时提示
-            if (_countdownSeconds > 0)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8.0),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        value: _countdownSeconds / _autoSendDelay,
-                        color: Colors.blue,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      '$_countdownSeconds 秒后自动发送...',
-                      style: const TextStyle(color: Colors.blue),
-                    ),
-                    const SizedBox(width: 8),
-                    GestureDetector(
-                      onTap: _cancelAutoSendTimer,
-                      child: const Text(
-                        '取消',
-                        style: TextStyle(
-                          color: Colors.red,
-                          decoration: TextDecoration.underline,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            
-            // 发送按钮 - 键盘弹出时隐藏（由悬浮按钮替代）
-            if (!isKeyboardVisible)
-              SizedBox(
-                height: 50,
-                child: ElevatedButton.icon(
-                  onPressed: (_isSending || _selectedDevice == null) ? null : _sendContent,
-                  icon: _isSending
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.send),
-                  label: Text(_isSending ? '发送中...' : '发送到电脑'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Theme.of(context).colorScheme.primary,
-                    foregroundColor: Colors.white,
-                  ),
-                ),
-              ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
