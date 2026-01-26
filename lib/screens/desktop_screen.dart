@@ -12,6 +12,8 @@ import '../services/socket_service.dart';
 import '../services/clipboard_service.dart';
 import '../services/clipboard_watcher_service.dart';
 import '../services/auth_service.dart';
+import '../services/encryption_service.dart';
+import 'package:cryptography/cryptography.dart';
 
 import 'settings_screen.dart';
 
@@ -35,6 +37,8 @@ class _DesktopScreenState extends State<DesktopScreen>
   bool _showHistory = false;  // 默认关闭历史记录
   bool _autoPaste = false;    // 自动粘贴功能，默认关闭
   bool _passwordEnabled = false;  // 密码保护功能
+  bool _encryptionEnabled = false;
+  SecretKey? _encryptionKey;
 
   bool _syncToMobile = false;     // 同步剪贴板到手机
   final List<_ReceivedMessage> _messages = [];
@@ -67,12 +71,21 @@ class _DesktopScreenState extends State<DesktopScreen>
   Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
     final passwordEnabled = await AuthService.isPasswordEnabled();
+    final encryptionEnabled = await EncryptionService.isEncryptionEnabled();
     
     setState(() {
       _autoPaste = prefs.getBool(_autoPasteKey) ?? false;
       _syncToMobile = prefs.getBool(_syncToMobileKey) ?? false;
       _passwordEnabled = passwordEnabled;
+      _encryptionEnabled = encryptionEnabled;
     });
+
+    if (encryptionEnabled && passwordEnabled) {
+      final hash = await AuthService.getPasswordHash();
+      if (hash != null) {
+        _encryptionKey = await EncryptionService.deriveKey(hash);
+      }
+    }
   }
 
   @override
@@ -128,11 +141,19 @@ class _DesktopScreenState extends State<DesktopScreen>
         verifyPassword: AuthService.verifyHash,
       );
       
+      _socketService.setEncryption(
+        enabled: _encryptionEnabled,
+        key: _encryptionKey,
+      );
+      
       // 启动 TCP 服务器
       _tcpPort = await _socketService.startServer();
       
       // 启动 UDP 发现监听
       final deviceName = Platform.localHostname;
+      // 获取密码盐值（如果启用了密码）
+      final salt = _passwordEnabled ? await AuthService.getSalt() : null;
+      _discoveryService.setSalt(salt);
       await _discoveryService.startListening(
         deviceName, 
         _tcpPort,
@@ -184,12 +205,15 @@ class _DesktopScreenState extends State<DesktopScreen>
   }
   
   /// 更新密码相关设置到服务
-  void _updatePasswordSettings() {
+  Future<void> _updatePasswordSettings() async {
     _socketService.setPasswordVerification(
       requiresPassword: _passwordEnabled,
       verifyPassword: AuthService.verifyHash,
     );
     _discoveryService.setRequiresPassword(_passwordEnabled);
+    // 更新盐值
+    final salt = _passwordEnabled ? await AuthService.getSalt() : null;
+    _discoveryService.setSalt(salt);
   }
   
   /// 处理认证结果
@@ -289,6 +313,18 @@ class _DesktopScreenState extends State<DesktopScreen>
               setState(() => _passwordEnabled = value);
               _updatePasswordSettings();
             },
+            onEncryptionChanged: (value) async {
+              setState(() => _encryptionEnabled = value);
+              if (value && _passwordEnabled) {
+                final hash = await AuthService.getPasswordHash();
+                if (hash != null) {
+                  _encryptionKey = await EncryptionService.deriveKey(hash);
+                }
+              } else {
+                _encryptionKey = null;
+              }
+              _socketService.setEncryption(enabled: value, key: _encryptionKey);
+            },
           ),
         ),
       ),
@@ -353,7 +389,7 @@ class _DesktopScreenState extends State<DesktopScreen>
             ),
         ],
       ),
-      body: Padding(
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -435,7 +471,8 @@ class _DesktopScreenState extends State<DesktopScreen>
             ),
             const SizedBox(height: 8),
             if (_showHistory)
-              Expanded(
+              SizedBox(
+                height: 400,
                 child: Card(
                   child: _messages.isEmpty
                       ? const Center(

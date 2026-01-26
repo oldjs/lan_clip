@@ -6,6 +6,8 @@ import '../models/clipboard_data.dart';
 import '../services/discovery_service.dart';
 import '../services/socket_service.dart';
 import '../services/auth_service.dart';
+import '../services/encryption_service.dart';
+import 'package:cryptography/cryptography.dart';
 import '../services/clipboard_service.dart' show cmdBackspace, cmdSpace, cmdClear, cmdEnter, cmdArrowUp, cmdArrowDown, cmdArrowLeft, cmdArrowRight;
 import '../services/clipboard_sync_service.dart';
 import '../services/mobile_clipboard_helper.dart';
@@ -40,6 +42,8 @@ class _MobileScreenState extends State<MobileScreen> {
   bool _isSending = false;
   bool _receiveFromPc = false;     // 是否接收电脑剪贴板
   int _syncPort = 0;               // 剪贴板同步监听端口
+  bool _encryptionEnabled = false;
+  SecretKey? _encryptionKey;
   
   // 存储设备对应的密码哈希（用户输入后缓存）
   final Map<String, String> _devicePasswords = {};
@@ -93,11 +97,13 @@ class _MobileScreenState extends State<MobileScreen> {
   Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
     final receiveFromPc = prefs.getBool(_receiveFromPcKey) ?? false;
+    final encryptionEnabled = await EncryptionService.isEncryptionEnabled();
     
     setState(() {
       _autoSendEnabled = prefs.getBool(_autoSendEnabledKey) ?? false;
       _autoSendDelay = prefs.getDouble(_autoSendDelayKey) ?? 3.0;
       _receiveFromPc = receiveFromPc;
+      _encryptionEnabled = encryptionEnabled;
     });
     
     // 如果启用了接收功能，启动同步服务
@@ -173,6 +179,7 @@ class _MobileScreenState extends State<MobileScreen> {
   
   /// 启动剪贴板同步服务
   Future<void> _startSyncService() async {
+    _clipboardSyncService.setEncryption(enabled: _encryptionEnabled, key: _encryptionKey);
     final port = await _clipboardSyncService.startServer();
     setState(() => _syncPort = port);
   }
@@ -245,8 +252,14 @@ class _MobileScreenState extends State<MobileScreen> {
         if (password == null) {
           return; // 用户取消
         }
-        passwordHash = AuthService.hashPassword(password);
+        // 使用设备提供的盐值计算哈希
+        final salt = _selectedDevice!.salt ?? '';
+        passwordHash = AuthService.hashPassword(password, salt);
         _devicePasswords[deviceKey] = passwordHash; // 缓存密码哈希
+        if (_encryptionEnabled) {
+          // 使用密码哈希派生密钥，确保与电脑端一致
+          _encryptionKey = await EncryptionService.deriveKey(passwordHash);
+        }
       }
     }
 
@@ -254,6 +267,7 @@ class _MobileScreenState extends State<MobileScreen> {
       _isSending = true;
     });
 
+    _socketService.setEncryption(enabled: _encryptionEnabled, key: _encryptionKey);
     final result = await _socketService.sendMessage(
       _selectedDevice!.ip,
       _selectedDevice!.port,
@@ -350,11 +364,18 @@ class _MobileScreenState extends State<MobileScreen> {
         if (silent) return; // 长按时不弹密码框
         final password = await _showPasswordDialog();
         if (password == null) return;
-        passwordHash = AuthService.hashPassword(password);
+        // 使用设备提供的盐值计算哈希
+        final salt = _selectedDevice!.salt ?? '';
+        passwordHash = AuthService.hashPassword(password, salt);
         _devicePasswords[deviceKey] = passwordHash;
+        if (_encryptionEnabled) {
+          // 使用密码哈希派生密钥，确保与电脑端一致
+          _encryptionKey = await EncryptionService.deriveKey(passwordHash);
+        }
       }
     }
     
+    _socketService.setEncryption(enabled: _encryptionEnabled, key: _encryptionKey);
     final result = await _socketService.sendMessage(
       _selectedDevice!.ip,
       _selectedDevice!.port,
@@ -492,6 +513,10 @@ class _MobileScreenState extends State<MobileScreen> {
             onAutoSendDelayChanged: (value) {
               setState(() => _autoSendDelay = value);
               _cancelAutoSendTimer();
+            },
+            onEncryptionChanged: (value) {
+              setState(() => _encryptionEnabled = value);
+              _clipboardSyncService.setEncryption(enabled: value, key: _encryptionKey);
             },
           ),
         ),

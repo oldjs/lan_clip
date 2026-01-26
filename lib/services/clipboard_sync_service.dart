@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:convert';
 import '../models/clipboard_data.dart';
+import '../services/encryption_service.dart';
+import 'package:cryptography/cryptography.dart';
 
 /// 手机端剪贴板同步接收服务
 /// 监听电脑端推送的剪贴板内容
@@ -11,6 +13,14 @@ class ClipboardSyncService {
   ServerSocket? _server;
   final _contentController = StreamController<ClipboardContent>.broadcast();
   int _port = defaultSyncPort;
+  
+  SecretKey? _encryptionKey;
+  bool _encryptionEnabled = false;
+
+  void setEncryption({required bool enabled, SecretKey? key}) {
+    _encryptionEnabled = enabled;
+    _encryptionKey = key;
+  }
   
   /// 接收到的剪贴板内容流
   Stream<ClipboardContent> get contentStream => _contentController.stream;
@@ -46,14 +56,33 @@ class ClipboardSyncService {
       (data) {
         buffer.addAll(data);
       },
-      onDone: () {
+      onDone: () async {
         if (buffer.isEmpty) {
           client.close();
           return;
         }
         
         try {
-          final message = utf8.decode(buffer);
+          var message = utf8.decode(buffer);
+          
+          // 如果消息加密，尝试解密
+          if (EncryptionService.isEncrypted(message)) {
+            if (_encryptionEnabled && _encryptionKey != null) {
+              final decrypted = await EncryptionService.decrypt(message, _encryptionKey!);
+              if (decrypted != null) {
+                message = decrypted;
+              } else {
+                // 解密失败，忽略
+                client.close();
+                return;
+              }
+            } else {
+              // 未启用加密或没有密钥，但收到加密消息，忽略
+              client.close();
+              return;
+            }
+          }
+
           final content = ClipboardContent.deserialize(message);
           if (content != null) {
             _contentController.add(content);

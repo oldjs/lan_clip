@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:launch_at_startup/launch_at_startup.dart';
 import '../services/auth_service.dart';
+import '../services/encryption_service.dart';
 import '../main.dart' show startHiddenKey;
 
 // SharedPreferences 键名
@@ -21,6 +22,7 @@ class SettingsCallbacks {
   final Function(bool)? onAutoSendChanged;
   final Function(double)? onAutoSendDelayChanged;
   final Function(bool)? onPasswordChanged;
+  final Function(bool)? onEncryptionChanged;
   final Function(bool)? onLaunchAtStartupChanged;
   final Function(bool)? onStartHiddenChanged;
 
@@ -31,6 +33,7 @@ class SettingsCallbacks {
     this.onAutoSendChanged,
     this.onAutoSendDelayChanged,
     this.onPasswordChanged,
+    this.onEncryptionChanged,
     this.onLaunchAtStartupChanged,
     this.onStartHiddenChanged,
   });
@@ -59,6 +62,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   // 安全设置
   bool _passwordEnabled = false;
+  bool _encryptionEnabled = false;
 
   // 启动设置
   bool _launchAtStartup = false;
@@ -76,6 +80,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _loadAllSettings() async {
     final prefs = await SharedPreferences.getInstance();
     final passwordEnabled = await AuthService.isPasswordEnabled();
+    final encryptionEnabled = await EncryptionService.isEncryptionEnabled();
 
     bool startupEnabled = false;
     if (Platform.isWindows) {
@@ -97,6 +102,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
       // 安全
       _passwordEnabled = passwordEnabled;
+      _encryptionEnabled = encryptionEnabled;
 
       // 启动
       _launchAtStartup = startupEnabled;
@@ -162,6 +168,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
       setState(() => _passwordEnabled = false);
       widget.callbacks?.onPasswordChanged?.call(false);
     }
+  }
+
+  Future<void> _setEncryptionEnabled(bool value) async {
+    await EncryptionService.setEncryptionEnabled(value);
+    setState(() => _encryptionEnabled = value);
+    widget.callbacks?.onEncryptionChanged?.call(value);
   }
 
   Future<void> _setLaunchAtStartup(bool value) async {
@@ -357,6 +369,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           onTap: _changePassword,
                         ),
                       ],
+                      const Divider(height: 1),
+                      _buildSwitchTile(
+                        title: '加密传输',
+                        subtitle: _encryptionEnabled ? '已启用端到端加密' : '数据以明文传输',
+                        value: _encryptionEnabled,
+                        onChanged: _setEncryptionEnabled,
+                      ),
                     ],
                   ),
                 ),

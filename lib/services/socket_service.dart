@@ -3,6 +3,8 @@ import 'dart:io';
 import 'dart:convert';
 import '../models/device.dart';
 import '../models/clipboard_data.dart';
+import '../services/encryption_service.dart';
+import 'package:cryptography/cryptography.dart';
 
 /// 认证消息结果
 class AuthResult {
@@ -31,6 +33,19 @@ class SocketService {
   // 密码验证回调
   Future<bool> Function(String hash)? _verifyPassword;
   bool _requiresPassword = false;
+  
+  // 加密密钥（由外部设置）
+  SecretKey? _encryptionKey;
+  bool _encryptionEnabled = false;
+
+  /// 设置加密
+  void setEncryption({
+    required bool enabled,
+    SecretKey? key,
+  }) {
+    _encryptionEnabled = enabled;
+    _encryptionKey = key;
+  }
   
   /// 设置密码验证
   void setPasswordVerification({
@@ -95,7 +110,7 @@ class SocketService {
     }
     
     final authLine = rawMessage.substring(0, newlineIndex);
-    final content = rawMessage.substring(newlineIndex + 1);
+    var content = rawMessage.substring(newlineIndex + 1);
     
     // 解析认证头: AUTH:哈希
     if (!authLine.startsWith('AUTH:')) {
@@ -110,6 +125,17 @@ class SocketService {
     
     // 不需要密码时，任何认证都通过
     if (!_requiresPassword) {
+      // 检查内容是否加密
+      if (EncryptionService.isEncrypted(content)) {
+        if (_encryptionKey != null) {
+          final decrypted = await EncryptionService.decrypt(content, _encryptionKey!);
+          if (decrypted != null) {
+            content = decrypted;
+          } else {
+            return AuthResult(success: false, error: '解密失败');
+          }
+        }
+      }
       return AuthResult(success: true, message: content);
     }
     
@@ -121,6 +147,17 @@ class SocketService {
     if (_verifyPassword != null) {
       final valid = await _verifyPassword!(hash);
       if (valid) {
+        // 检查内容是否加密
+        if (EncryptionService.isEncrypted(content)) {
+          if (_encryptionKey != null) {
+            final decrypted = await EncryptionService.decrypt(content, _encryptionKey!);
+            if (decrypted != null) {
+              content = decrypted;
+            } else {
+              return AuthResult(success: false, error: '解密失败');
+            }
+          }
+        }
         return AuthResult(success: true, message: content);
       }
       return AuthResult(success: false, error: '密码错误');
@@ -137,8 +174,13 @@ class SocketService {
         timeout: const Duration(seconds: 5),
       );
       
+      var finalMessage = message;
+      if (_encryptionEnabled && _encryptionKey != null) {
+        finalMessage = await EncryptionService.encrypt(message, _encryptionKey!);
+      }
+
       // 构建认证消息格式: AUTH:哈希\n内容
-      final authMessage = 'AUTH:${passwordHash ?? ''}\n$message';
+      final authMessage = 'AUTH:${passwordHash ?? ''}\n$finalMessage';
       socket.write(authMessage);
       await socket.flush();
       await socket.close();
@@ -156,7 +198,10 @@ class SocketService {
   ) async {
     if (devices.isEmpty) return;
     
-    final data = content.serialize();
+    var data = content.serialize();
+    if (_encryptionEnabled && _encryptionKey != null) {
+      data = await EncryptionService.encrypt(data, _encryptionKey!);
+    }
     
     // 并行推送到所有设备
     await Future.wait(

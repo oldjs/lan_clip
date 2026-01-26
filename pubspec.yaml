@@ -51,6 +51,9 @@ dependencies:
   # 密码哈希
   crypto: ^3.0.3
   
+  # AES-GCM 加密
+  cryptography: ^2.7.0
+  
   # 开机自启 (Windows)
   launch_at_startup: ^0.3.1
   package_info_plus: ^8.0.0

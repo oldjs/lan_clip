@@ -16,6 +16,7 @@ class DiscoveryService {
   int _tcpPort = 8888;
   int? _syncPort;               // 剪贴板同步端口(手机端)
   bool _requiresPassword = false;  // 是否需要密码验证
+  String? _salt;                    // 密码盐值
   
   /// 发现的设备流
   Stream<Device> get deviceStream => _deviceController.stream;
@@ -44,6 +45,11 @@ class DiscoveryService {
   /// 设置是否需要密码
   void setRequiresPassword(bool value) {
     _requiresPassword = value;
+  }
+  
+  /// 设置密码盐值
+  void setSalt(String? salt) {
+    _salt = salt;
   }
   
   /// 设置剪贴板同步端口(手机端)
@@ -85,9 +91,10 @@ class DiscoveryService {
               _connectedDeviceController.add(mobileDevice);
             }
             
-            // 回复发现请求，包含密码标志
+            // 回复发现请求，包含密码标志和盐值
             final passwordFlag = _requiresPassword ? '1' : '0';
-            final response = 'LAN_CLIP|$_deviceName|$_tcpPort|$passwordFlag';
+            final saltPart = _salt ?? '';
+            final response = 'LAN_CLIP|$_deviceName|$_tcpPort|$passwordFlag||$saltPart';
             _socket!.send(
               utf8.encode(response),
               datagram.address,
