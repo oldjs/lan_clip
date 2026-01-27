@@ -739,6 +739,21 @@ class _MobileScreenState extends State<MobileScreen> {
     );
   }
   
+  /// 切换自动发送开关
+  Future<void> _toggleAutoSend() async {
+    final newValue = !_autoSendEnabled;
+    setState(() {
+      _autoSendEnabled = newValue;
+      if (!newValue) _cancelAutoSendTimer();
+    });
+    
+    // 保存到 SharedPreferences
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_autoSendEnabledKey, newValue);
+    
+    _showSnackBar(newValue ? '自动发送已开启' : '自动发送已关闭');
+  }
+  
   /// 打开设置页面
   void _openSettings() {
     Navigator.push(
@@ -1006,8 +1021,7 @@ class _MobileScreenState extends State<MobileScreen> {
                     ),
                   const SizedBox(height: 8),
                   
-                  // 文本记忆入口按钮
-                  // 未连接时: 暂存按钮 / 已连接时: 进入记忆列表按钮
+                  // 文本记忆入口按钮 + 自动发送开关
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
@@ -1034,6 +1048,20 @@ class _MobileScreenState extends State<MobileScreen> {
                             foregroundColor: _memoryCount > 0 ? Colors.green : Colors.orange,
                           ),
                         ),
+                      const SizedBox(width: 12),
+                      // 自动发送快捷开关
+                      OutlinedButton.icon(
+                        onPressed: _toggleAutoSend,
+                        icon: Icon(
+                          _autoSendEnabled ? Icons.timer : Icons.timer_off_outlined,
+                          size: 18,
+                        ),
+                        label: Text(_autoSendEnabled ? '自动' : '手动'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: _autoSendEnabled ? Colors.blue : Colors.grey,
+                          backgroundColor: _autoSendEnabled ? Colors.blue.withValues(alpha: 0.1) : null,
+                        ),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 8),
