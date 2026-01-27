@@ -2,9 +2,12 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:launch_at_startup/launch_at_startup.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:open_filex/open_filex.dart';
 import '../services/auth_service.dart';
 import '../services/encryption_service.dart';
 import '../services/overlay_service.dart';
+import '../services/file_transfer_service.dart';
 import '../main.dart' show startHiddenKey;
 
 // SharedPreferences 键名
@@ -71,6 +74,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   
   // 悬浮窗设置 (仅 Android)
   bool _overlayEnabled = false;
+  
+  // 文件传输设置
+  String _downloadPath = '';
+  int _cacheSize = 0;
 
   bool _isLoading = true;
 
@@ -119,6 +126,87 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (Platform.isAndroid) {
       final overlayActive = await OverlayService.isActive();
       setState(() => _overlayEnabled = overlayActive);
+    }
+    
+    // 加载文件传输设置
+    await _loadFileTransferSettings();
+  }
+  
+  /// 加载文件传输设置
+  Future<void> _loadFileTransferSettings() async {
+    final transferService = FileTransferService();
+    final path = await transferService.getDownloadPath();
+    final size = await transferService.getCacheSize();
+    if (mounted) {
+      setState(() {
+        _downloadPath = path;
+        _cacheSize = size;
+      });
+    }
+  }
+  
+  /// 格式化文件大小
+  String _formatBytes(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    if (bytes < 1024 * 1024 * 1024) return '${(bytes / 1024 / 1024).toStringAsFixed(1)} MB';
+    return '${(bytes / 1024 / 1024 / 1024).toStringAsFixed(2)} GB';
+  }
+  
+  /// 清理下载缓存
+  Future<void> _clearCache() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('清理缓存'),
+        content: Text('确定要清理下载缓存吗?\n\n将删除 ${_formatBytes(_cacheSize)} 的文件。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('清理'),
+          ),
+        ],
+      ),
+    );
+    
+    if (confirmed == true) {
+      final transferService = FileTransferService();
+      await transferService.clearCache();
+      await _loadFileTransferSettings();
+      _showSnackBar('缓存已清理');
+    }
+  }
+
+  /// 选择下载目录 (仅桌面端)
+  Future<void> _pickDownloadPath() async {
+    if (Platform.isAndroid || Platform.isIOS) return;
+    
+    final String? selectedDirectory = await FilePicker.platform.getDirectoryPath(
+      dialogTitle: '选择保存位置',
+      initialDirectory: _downloadPath,
+    );
+
+    if (selectedDirectory != null) {
+      final transferService = FileTransferService();
+      await transferService.setDownloadPath(selectedDirectory);
+      await _loadFileTransferSettings();
+    }
+  }
+
+  /// 打开下载目录
+  Future<void> _openDownloadFolder() async {
+    if (_downloadPath.isEmpty) return;
+    
+    final dir = Directory(_downloadPath);
+    if (await dir.exists()) {
+      await OpenFilex.open(_downloadPath);
+    } else {
+      _showSnackBar('目录不存在');
     }
   }
 
@@ -466,6 +554,59 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         subtitle: _encryptionEnabled ? '已启用端到端加密' : '数据以明文传输',
                         value: _encryptionEnabled,
                         onChanged: _setEncryptionEnabled,
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // 文件传输设置组
+                _buildSectionHeader('文件传输'),
+                Card(
+                  child: Column(
+                    children: [
+                      // 下载目录
+                      ListTile(
+                        leading: const Icon(Icons.folder),
+                        title: const Text('下载目录'),
+                        subtitle: Text(
+                          _downloadPath,
+                          style: const TextStyle(fontSize: 11),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            // 桌面端显示编辑按钮
+                            if (!Platform.isAndroid && !Platform.isIOS)
+                              IconButton(
+                                icon: const Icon(Icons.edit, size: 20),
+                                tooltip: '修改',
+                                onPressed: _pickDownloadPath,
+                              ),
+                            IconButton(
+                              icon: const Icon(Icons.open_in_new, size: 20),
+                              tooltip: '打开',
+                              onPressed: _openDownloadFolder,
+                            ),
+                          ],
+                        ),
+                        onTap: _openDownloadFolder,
+                      ),
+                      const Divider(height: 1),
+                      // 缓存大小和清理
+                      ListTile(
+                        leading: const Icon(Icons.cleaning_services),
+                        title: const Text('清理缓存'),
+                        subtitle: Text(
+                          '已用空间: ${_formatBytes(_cacheSize)}',
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                        trailing: TextButton(
+                          onPressed: _cacheSize > 0 ? _clearCache : null,
+                          child: const Text('清理'),
+                        ),
                       ),
                     ],
                   ),

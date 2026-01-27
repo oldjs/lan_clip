@@ -16,6 +16,9 @@ import '../services/encryption_service.dart';
 import 'package:cryptography/cryptography.dart';
 
 import 'settings_screen.dart';
+import 'file_transfer_screen.dart';
+import '../services/file_transfer_service.dart';
+import '../models/file_transfer.dart';
 
 /// 电脑端界面 - 接收内容并写入剪切板
 class DesktopScreen extends StatefulWidget {
@@ -30,6 +33,10 @@ class _DesktopScreenState extends State<DesktopScreen>
   final _discoveryService = DiscoveryService();
   final _socketService = SocketService();
   final _clipboardWatcher = ClipboardWatcherService();
+  final _fileTransferService = FileTransferService();
+  
+  int _activeTransferCount = 0;
+  StreamSubscription<List<FileTransferTask>>? _transferSubscription;
   
   String _localIp = '获取中...';
   int _tcpPort = SocketService.defaultPort;
@@ -48,6 +55,7 @@ class _DesktopScreenState extends State<DesktopScreen>
   StreamSubscription<Device>? _connectedDeviceSubscription;
   StreamSubscription<ClipboardContent>? _clipboardSubscription;
   Timer? _keepAliveTimer;  // 保活定时器，防止窗口失焦时事件循环被降低优先级
+  StreamSubscription<FileTransferTask>? _transferRequestSubscription;
   
   // 设置项的存储键
   static const String _autoPasteKey = 'auto_paste_enabled';
@@ -96,6 +104,8 @@ class _DesktopScreenState extends State<DesktopScreen>
     _messageSubscription?.cancel();
     _connectedDeviceSubscription?.cancel();
     _clipboardSubscription?.cancel();
+    _transferSubscription?.cancel();
+    _transferRequestSubscription?.cancel();
     _discoveryService.dispose();
     _socketService.dispose();
     _clipboardWatcher.dispose();
@@ -180,6 +190,33 @@ class _DesktopScreenState extends State<DesktopScreen>
         await _clipboardWatcher.startWatching();
       }
 
+      // 启动文件传输服务
+      await _fileTransferService.startServer();
+      _fileTransferService.setEncryption(enabled: _encryptionEnabled, key: _encryptionKey);
+      
+      // 监听文件传输任务
+      _transferSubscription = _fileTransferService.taskStream.listen((tasks) {
+        if (mounted) {
+          setState(() {
+            _activeTransferCount = tasks.where((t) => t.isActive).length;
+          });
+        }
+      });
+
+      // 监听文件接收请求
+      _transferRequestSubscription = _fileTransferService.requestStream.listen((task) async {
+        final autoAccept = await _fileTransferService.isAutoAcceptEnabled();
+        if (autoAccept) {
+          if (mounted) {
+            _showSnackBar('已自动接收 ${task.fileName}');
+          }
+          return;
+        }
+        if (mounted) {
+          _showIncomingFileDialog(task);
+        }
+      });
+
       setState(() => _isRunning = true);
       
       // 启动保活定时器，防止窗口失焦时 Dart 事件循环被降低优先级
@@ -260,6 +297,69 @@ class _DesktopScreenState extends State<DesktopScreen>
   void _showSnackBar(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message), duration: const Duration(seconds: 2)),
+    );
+  }
+
+  /// 显示接收确认对话框
+  Future<void> _showIncomingFileDialog(FileTransferTask task) async {
+    final downloadPath = await _fileTransferService.getDownloadPath();
+    var autoAccept = await _fileTransferService.isAutoAcceptEnabled();
+    if (!mounted) return;
+
+    await showDialog<void>(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: const Text('接收文件'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('文件: ${task.fileName}'),
+                  const SizedBox(height: 6),
+                  Text('大小: ${task.formattedSize}'),
+                  const SizedBox(height: 6),
+                  Text('保存到: $downloadPath'),
+                  const SizedBox(height: 12),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('始终自动接收'),
+                    value: autoAccept,
+                    onChanged: (value) async {
+                      setState(() => autoAccept = value);
+                      await _fileTransferService.setAutoAcceptEnabled(value);
+                    },
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    _fileTransferService.rejectTask(task.id);
+                  },
+                  child: const Text('拒绝'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    _fileTransferService.acceptTask(task.id);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const FileTransferScreen(),
+                      ),
+                    );
+                  },
+                  child: const Text('接收'),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
   
@@ -374,13 +474,55 @@ class _DesktopScreenState extends State<DesktopScreen>
         title: const Text('LAN Clip - 接收端'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         actions: [
-          // 设置入口
-          IconButton(
-            icon: const Icon(Icons.settings),
-            tooltip: '设置',
-            onPressed: _openSettings,
-          ),
-          // 最小化到托盘按钮
+              // 设置入口
+              IconButton(
+                icon: const Icon(Icons.settings),
+                tooltip: '设置',
+                onPressed: _openSettings,
+              ),
+              // 文件传输入口
+              IconButton(
+                icon: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    const Icon(Icons.folder_shared),
+                    if (_activeTransferCount > 0)
+                      Positioned(
+                        right: -4,
+                        top: -4,
+                        child: Container(
+                          padding: const EdgeInsets.all(2),
+                          decoration: const BoxDecoration(
+                            color: Colors.red,
+                            shape: BoxShape.circle,
+                          ),
+                          constraints: const BoxConstraints(
+                            minWidth: 16,
+                            minHeight: 16,
+                          ),
+                          child: Text(
+                            '$_activeTransferCount',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                tooltip: '文件传输',
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const FileTransferScreen(),
+                    ),
+                  );
+                },
+              ),
+              // 最小化到托盘按钮
           if (Platform.isWindows)
             IconButton(
               icon: const Icon(Icons.minimize),

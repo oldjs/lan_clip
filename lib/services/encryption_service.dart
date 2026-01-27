@@ -152,6 +152,64 @@ class EncryptionService {
     return message.startsWith(_encryptedPrefix);
   }
   
+  /// 加密字节数据
+  static Future<Uint8List> encryptBytes(Uint8List data, SecretKey key) async {
+    final algorithm = AesGcm.with256bits();
+    final nonce = algorithm.newNonce();
+    
+    final secretBox = await algorithm.encrypt(
+      data,
+      secretKey: key,
+      nonce: nonce,
+    );
+    
+    // 组合: nonce + ciphertext + mac
+    final nonceBytes = Uint8List.fromList(nonce);
+    final cipherBytes = Uint8List.fromList(secretBox.cipherText);
+    final macBytes = Uint8List.fromList(secretBox.mac.bytes);
+    
+    final combined = Uint8List(
+      nonceBytes.length + cipherBytes.length + macBytes.length,
+    );
+    
+    int offset = 0;
+    combined.setRange(offset, offset + nonceBytes.length, nonceBytes);
+    offset += nonceBytes.length;
+    combined.setRange(offset, offset + cipherBytes.length, cipherBytes);
+    offset += cipherBytes.length;
+    combined.setRange(offset, offset + macBytes.length, macBytes);
+    
+    return combined;
+  }
+  
+  /// 解密字节数据
+  static Future<Uint8List?> decryptBytes(Uint8List encrypted, SecretKey key) async {
+    try {
+      if (encrypted.length < _nonceLength + 16) return null;
+      
+      final nonce = encrypted.sublist(0, _nonceLength);
+      final cipherText = encrypted.sublist(_nonceLength, encrypted.length - 16);
+      final mac = encrypted.sublist(encrypted.length - 16);
+      
+      final algorithm = AesGcm.with256bits();
+      
+      final secretBox = SecretBox(
+        cipherText,
+        nonce: nonce,
+        mac: Mac(mac),
+      );
+      
+      final decrypted = await algorithm.decrypt(
+        secretBox,
+        secretKey: key,
+      );
+      
+      return Uint8List.fromList(decrypted);
+    } catch (e) {
+      return null;
+    }
+  }
+  
   /// 清除缓存的密钥
   static void clearCache() {
     _cachedKey = null;

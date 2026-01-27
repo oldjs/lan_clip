@@ -6,6 +6,7 @@ list(APPEND FLUTTER_PLUGIN_LIST
   clipboard_watcher
   keypress_simulator_windows
   pasteboard
+  permission_handler_windows
   screen_retriever_windows
   tray_manager
   window_manager

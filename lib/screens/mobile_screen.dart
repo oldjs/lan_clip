@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/device.dart';
@@ -11,10 +12,14 @@ import 'package:cryptography/cryptography.dart';
 import '../services/clipboard_service.dart' show cmdBackspace, cmdSpace, cmdClear, cmdEnter, cmdArrowUp, cmdArrowDown, cmdArrowLeft, cmdArrowRight, cmdShutdown, cmdShutdownCancel, cmdShutdownNow;
 import '../services/clipboard_sync_service.dart';
 import '../services/mobile_clipboard_helper.dart';
+import '../services/file_transfer_service.dart';
+import '../services/storage_permission_service.dart';
+import '../models/file_transfer.dart';
 import 'touchpad_screen.dart';
 import 'simple_input_screen.dart';
 import 'settings_screen.dart';
 import 'text_memory_screen.dart';
+import 'file_transfer_screen.dart';
 import '../services/input_method_service.dart';
 import '../services/text_memory_service.dart';
 
@@ -36,6 +41,7 @@ class _MobileScreenState extends State<MobileScreen> {
   final _discoveryService = DiscoveryService();
   final _socketService = SocketService();
   final _clipboardSyncService = ClipboardSyncService();
+  final _fileTransferService = FileTransferService(); // 文件传输服务
   final _inputFocusNode = FocusNode(); // 输入框焦点
   final _textMemoryService = TextMemoryService();
   
@@ -45,6 +51,7 @@ class _MobileScreenState extends State<MobileScreen> {
   bool _isSending = false;
   bool _receiveFromPc = false;     // 是否接收电脑剪贴板
   int _syncPort = 0;               // 剪贴板同步监听端口
+  int _activeTransferCount = 0;    // 活跃传输任务数
   bool _encryptionEnabled = false;
   SecretKey? _encryptionKey;
   
@@ -53,6 +60,8 @@ class _MobileScreenState extends State<MobileScreen> {
   
   StreamSubscription<Device>? _deviceSubscription;
   StreamSubscription<ClipboardContent>? _syncSubscription;
+  StreamSubscription<List<FileTransferTask>>? _transferSubscription;
+  StreamSubscription<FileTransferTask>? _transferRequestSubscription;
   
   // 自动发送相关状态
   bool _autoSendEnabled = false;
@@ -87,6 +96,40 @@ class _MobileScreenState extends State<MobileScreen> {
     
     // 监听输入变化，触发自动发送计时
     _textController.addListener(_onTextChanged);
+    
+    _initFileTransfer();
+  }
+  
+  Future<void> _initFileTransfer() async {
+    // Android: 请求存储权限
+    if (Platform.isAndroid) {
+      await StoragePermissionService.requestPermission(context);
+    }
+    
+    await _fileTransferService.startServer();
+    // 设置文件传输加密配置
+    _fileTransferService.setEncryption(enabled: _encryptionEnabled, key: _encryptionKey);
+    _transferSubscription = _fileTransferService.taskStream.listen((tasks) {
+      if (mounted) {
+        setState(() {
+          _activeTransferCount = tasks.where((t) => t.isActive).length;
+        });
+      }
+    });
+    
+    // 监听传输请求
+    _transferRequestSubscription = _fileTransferService.requestStream.listen((task) async {
+      final autoAccept = await _fileTransferService.isAutoAcceptEnabled();
+      if (autoAccept) {
+        if (mounted) {
+          _showSnackBar('已自动接收 ${task.fileName}');
+        }
+        return;
+      }
+      if (mounted) {
+        _showIncomingFileDialog(task);
+      }
+    });
   }
   
   /// 初始化：加载设置 -> 搜索设备（确保顺序执行）
@@ -119,6 +162,8 @@ class _MobileScreenState extends State<MobileScreen> {
       _receiveFromPc = receiveFromPc;
       _encryptionEnabled = encryptionEnabled;
     });
+    // 同步文件传输加密配置
+    _fileTransferService.setEncryption(enabled: _encryptionEnabled, key: _encryptionKey);
     
     // 如果启用了接收功能，启动同步服务
     if (receiveFromPc) {
@@ -133,9 +178,12 @@ class _MobileScreenState extends State<MobileScreen> {
     _inputFocusNode.dispose();
     _deviceSubscription?.cancel();
     _syncSubscription?.cancel();
+    _transferSubscription?.cancel();
+    _transferRequestSubscription?.cancel();
     _discoveryService.dispose();
     _socketService.dispose();
     _clipboardSyncService.dispose();
+    _fileTransferService.dispose();
     _cancelAutoSendTimer();
     _longPressTimer?.cancel();
     super.dispose();
@@ -276,6 +324,8 @@ class _MobileScreenState extends State<MobileScreen> {
         if (_encryptionEnabled) {
           // 使用密码哈希派生密钥，确保与电脑端一致
           _encryptionKey = await EncryptionService.deriveKey(passwordHash);
+          // 同步文件传输加密密钥
+          _fileTransferService.setEncryption(enabled: _encryptionEnabled, key: _encryptionKey);
         }
       }
     }
@@ -360,6 +410,69 @@ class _MobileScreenState extends State<MobileScreen> {
       SnackBar(content: Text(message), duration: const Duration(seconds: 2)),
     );
   }
+
+  /// 显示接收确认对话框
+  Future<void> _showIncomingFileDialog(FileTransferTask task) async {
+    final downloadPath = await _fileTransferService.getDownloadPath();
+    var autoAccept = await _fileTransferService.isAutoAcceptEnabled();
+    if (!mounted) return;
+
+    await showDialog<void>(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: const Text('接收文件'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('文件: ${task.fileName}'),
+                  const SizedBox(height: 6),
+                  Text('大小: ${task.formattedSize}'),
+                  const SizedBox(height: 6),
+                  Text('保存到: $downloadPath'),
+                  const SizedBox(height: 12),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('始终自动接收'),
+                    value: autoAccept,
+                    onChanged: (value) async {
+                      setState(() => autoAccept = value);
+                      await _fileTransferService.setAutoAcceptEnabled(value);
+                    },
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    _fileTransferService.rejectTask(task.id);
+                  },
+                  child: const Text('拒绝'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    _fileTransferService.acceptTask(task.id);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const FileTransferScreen(),
+                      ),
+                    );
+                  },
+                  child: const Text('接收'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
   
   /// 发送控制指令到电脑
   /// [silent] 为 true 时不显示提示（用于长按连续触发）
@@ -391,6 +504,8 @@ class _MobileScreenState extends State<MobileScreen> {
         if (_encryptionEnabled) {
           // 使用密码哈希派生密钥，确保与电脑端一致
           _encryptionKey = await EncryptionService.deriveKey(passwordHash);
+          // 同步文件传输加密密钥
+          _fileTransferService.setEncryption(enabled: _encryptionEnabled, key: _encryptionKey);
         }
       }
     }
@@ -782,6 +897,8 @@ class _MobileScreenState extends State<MobileScreen> {
             onEncryptionChanged: (value) {
               setState(() => _encryptionEnabled = value);
               _clipboardSyncService.setEncryption(enabled: value, key: _encryptionKey);
+              // 同步文件传输加密开关
+              _fileTransferService.setEncryption(enabled: value, key: _encryptionKey);
             },
           ),
         ),
@@ -853,6 +970,58 @@ class _MobileScreenState extends State<MobileScreen> {
             icon: const Icon(Icons.touch_app),
             tooltip: '触摸板',
             onPressed: _selectedDevice == null ? null : _openTouchpad,
+          ),
+          // 文件传输入口
+          IconButton(
+            icon: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                const Icon(Icons.folder_shared),
+                if (_activeTransferCount > 0)
+                  Positioned(
+                    right: -4,
+                    top: -4,
+                    child: Container(
+                      padding: const EdgeInsets.all(2),
+                      decoration: const BoxDecoration(
+                        color: Colors.red,
+                        shape: BoxShape.circle,
+                      ),
+                      constraints: const BoxConstraints(
+                        minWidth: 16,
+                        minHeight: 16,
+                      ),
+                      child: Text(
+                        '$_activeTransferCount',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            tooltip: '文件传输',
+            onPressed: () {
+              // 传递当前选中的设备和密码哈希
+              String? passwordHash;
+              if (_selectedDevice != null && _selectedDevice!.requiresPassword) {
+                final deviceKey = '${_selectedDevice!.ip}:${_selectedDevice!.port}';
+                passwordHash = _devicePasswords[deviceKey];
+              }
+              
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => FileTransferScreen(
+                    selectedDevice: _selectedDevice,
+                    passwordHash: passwordHash,
+                  ),
+                ),
+              );
+            },
           ),
           // 设置入口
           IconButton(
