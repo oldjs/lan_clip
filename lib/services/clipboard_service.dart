@@ -51,6 +51,11 @@ const String cmdWinE = '${cmdPrefix}WIN_E';          // Win+E 资源管理器
 const String cmdAltTab = '${cmdPrefix}ALT_TAB';      // Alt+Tab
 const String cmdAltF4 = '${cmdPrefix}ALT_F4';        // Alt+F4
 
+// 关机控制指令
+const String cmdShutdown = '${cmdPrefix}SHUTDOWN';           // CMD:SHUTDOWN:秒数 定时关机
+const String cmdShutdownCancel = '${cmdPrefix}SHUTDOWN_CANCEL';  // 取消关机
+const String cmdShutdownNow = '${cmdPrefix}SHUTDOWN_NOW';        // 立即关机
+
 /// 重试配置
 const int _maxRetries = 3;           // 最大重试次数
 const int _retryDelayMs = 30;        // 重试间隔(毫秒)
@@ -73,6 +78,10 @@ class ClipboardService {
     }
     if (command.startsWith(cmdMouseScroll)) {
       return _handleMouseScroll(command);
+    }
+    // 处理定时关机指令: CMD:SHUTDOWN:秒数
+    if (command.startsWith(cmdShutdown) && !command.startsWith(cmdShutdownCancel) && !command.startsWith(cmdShutdownNow)) {
+      return _handleShutdown(command);
     }
     
     switch (command) {
@@ -180,9 +189,35 @@ class ClipboardService {
       case cmdAltF4:
         await _simulateModifierKeyWithRetry(PhysicalKeyboardKey.f4, ModifierKey.altModifier);
         return null;
+      // 关机控制指令
+      case cmdShutdownCancel:
+        await Process.run('shutdown', ['/a']);
+        return '已取消关机';
+      case cmdShutdownNow:
+        await Process.run('shutdown', ['/s', '/t', '0']);
+        return '正在关机...';
       default:
         return null;
     }
+  }
+  
+  /// 处理定时关机指令: CMD:SHUTDOWN:秒数
+  static Future<String?> _handleShutdown(String command) async {
+    final parts = command.split(':');
+    if (parts.length >= 3) {
+      final seconds = int.tryParse(parts[2]) ?? 60;
+      await Process.run('shutdown', ['/s', '/t', '$seconds']);
+      final minutes = seconds ~/ 60;
+      final secs = seconds % 60;
+      if (minutes > 0 && secs > 0) {
+        return '已设置 $minutes 分 $secs 秒后关机';
+      } else if (minutes > 0) {
+        return '已设置 $minutes 分钟后关机';
+      } else {
+        return '已设置 $seconds 秒后关机';
+      }
+    }
+    return null;
   }
   
   /// 处理鼠标移动指令: CMD:MOUSE_MOVE:dx:dy
