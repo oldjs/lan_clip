@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../models/file_transfer.dart';
 
 /// 文件传输项组件
@@ -131,34 +132,35 @@ class _TransferItemWidgetState extends State<TransferItemWidget>
   Widget _buildFileIcon() {
     IconData icon;
     Color color;
+    final colorScheme = Theme.of(context).colorScheme;
     
     final ext = widget.task.fileName.split('.').last.toLowerCase();
     
     // 根据扩展名选择图标
     if (['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'].contains(ext)) {
-      icon = Icons.image;
-      color = Colors.green;
+      icon = PhosphorIconsRegular.image;
+      color = colorScheme.secondary;
     } else if (['mp4', 'avi', 'mov', 'mkv', 'wmv'].contains(ext)) {
-      icon = Icons.video_file;
-      color = Colors.purple;
+      icon = PhosphorIconsRegular.video;
+      color = colorScheme.primary;
     } else if (['mp3', 'wav', 'flac', 'aac', 'ogg'].contains(ext)) {
-      icon = Icons.audio_file;
-      color = Colors.orange;
+      icon = PhosphorIconsRegular.musicNoteSimple;
+      color = colorScheme.tertiary;
     } else if (['pdf'].contains(ext)) {
-      icon = Icons.picture_as_pdf;
-      color = Colors.red;
+      icon = PhosphorIconsRegular.filePdf;
+      color = colorScheme.error;
     } else if (['doc', 'docx', 'txt', 'rtf'].contains(ext)) {
-      icon = Icons.description;
-      color = Colors.blue;
+      icon = PhosphorIconsRegular.fileText;
+      color = colorScheme.primary;
     } else if (['zip', 'rar', '7z', 'tar', 'gz'].contains(ext)) {
-      icon = Icons.folder_zip;
-      color = Colors.amber;
+      icon = PhosphorIconsRegular.fileZip;
+      color = colorScheme.tertiary;
     } else if (['apk'].contains(ext)) {
-      icon = Icons.android;
-      color = Colors.green.shade700;
+      icon = PhosphorIconsRegular.androidLogo;
+      color = colorScheme.secondary;
     } else {
-      icon = Icons.insert_drive_file;
-      color = Colors.grey;
+      icon = PhosphorIconsRegular.file;
+      color = colorScheme.onSurfaceVariant;
     }
     
     return Container(
@@ -168,33 +170,35 @@ class _TransferItemWidgetState extends State<TransferItemWidget>
         color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(8),
       ),
-      child: Icon(icon, color: color, size: 28),
+      child: PhosphorIcon(icon, color: color, size: 28),
     );
   }
 
   /// 传输方向标签
   Widget _buildDirectionBadge() {
     final isSend = widget.task.direction == TransferDirection.send;
+    final colorScheme = Theme.of(context).colorScheme;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: isSend ? Colors.blue.shade50 : Colors.green.shade50,
+        color: (isSend ? colorScheme.primary : colorScheme.secondary)
+            .withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(4),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            isSend ? Icons.upload : Icons.download,
+          PhosphorIcon(
+            isSend ? PhosphorIconsRegular.uploadSimple : PhosphorIconsRegular.downloadSimple,
             size: 12,
-            color: isSend ? Colors.blue : Colors.green,
+            color: isSend ? colorScheme.primary : colorScheme.secondary,
           ),
           const SizedBox(width: 2),
           Text(
             isSend ? '发送' : '接收',
             style: TextStyle(
               fontSize: 10,
-              color: isSend ? Colors.blue : Colors.green,
+              color: isSend ? colorScheme.primary : colorScheme.secondary,
             ),
           ),
         ],
@@ -211,38 +215,38 @@ class _TransferItemWidgetState extends State<TransferItemWidget>
     switch (widget.task.status) {
       case TransferStatus.pending:
         text = '等待中';
-        color = Colors.grey;
-        icon = Icons.hourglass_empty;
+        color = Theme.of(context).colorScheme.onSurfaceVariant;
+        icon = PhosphorIconsRegular.clockCounterClockwise;
         break;
       case TransferStatus.connecting:
         text = '连接中';
-        color = Colors.blue;
-        icon = Icons.sync;
+        color = Theme.of(context).colorScheme.primary;
+        icon = PhosphorIconsRegular.arrowsClockwise;
         break;
       case TransferStatus.transferring:
         text = '传输中';
-        color = Colors.blue;
-        icon = Icons.swap_horiz;
+        color = Theme.of(context).colorScheme.primary;
+        icon = PhosphorIconsRegular.arrowsLeftRight;
         break;
       case TransferStatus.paused:
         text = '已暂停';
-        color = Colors.orange;
-        icon = Icons.pause;
+        color = Theme.of(context).colorScheme.tertiary;
+        icon = PhosphorIconsRegular.pause;
         break;
       case TransferStatus.completed:
         text = '已完成';
-        color = Colors.green;
-        icon = Icons.check_circle;
+        color = Theme.of(context).colorScheme.secondary;
+        icon = PhosphorIconsRegular.checkCircle;
         break;
       case TransferStatus.failed:
         text = '失败';
-        color = Colors.red;
-        icon = Icons.error;
+        color = Theme.of(context).colorScheme.error;
+        icon = PhosphorIconsRegular.warningCircle;
         break;
       case TransferStatus.cancelled:
         text = '已取消';
-        color = Colors.grey;
-        icon = Icons.cancel;
+        color = Theme.of(context).colorScheme.onSurfaceVariant;
+        icon = PhosphorIconsRegular.xCircle;
         break;
     }
     
@@ -255,7 +259,7 @@ class _TransferItemWidgetState extends State<TransferItemWidget>
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 12, color: color),
+          PhosphorIcon(icon, size: 12, color: color),
           const SizedBox(width: 4),
           Text(
             text,
@@ -328,7 +332,11 @@ class _TransferItemWidgetState extends State<TransferItemWidget>
             children: [
               Row(
                 children: [
-                  Icon(Icons.speed, size: 14, color: Colors.grey.shade500),
+                  PhosphorIcon(
+                    PhosphorIconsRegular.gauge,
+                    size: 14,
+                    color: Colors.grey.shade500,
+                  ),
                   const SizedBox(width: 4),
                   Text(
                     widget.task.formattedSpeed,
@@ -341,7 +349,11 @@ class _TransferItemWidgetState extends State<TransferItemWidget>
               ),
               Row(
                 children: [
-                  Icon(Icons.timer, size: 14, color: Colors.grey.shade500),
+                  PhosphorIcon(
+                    PhosphorIconsRegular.timer,
+                    size: 14,
+                    color: Colors.grey.shade500,
+                  ),
                   const SizedBox(width: 4),
                   Text(
                     '剩余 ${widget.task.formattedRemainingTime}',
@@ -383,7 +395,7 @@ class _TransferItemWidgetState extends State<TransferItemWidget>
     if (widget.task.canPause) {
       actions.add(
         _buildActionButton(
-          icon: Icons.pause,
+          icon: PhosphorIconsRegular.pause,
           label: '暂停',
           onTap: widget.onPause,
           color: Colors.orange,
@@ -393,7 +405,9 @@ class _TransferItemWidgetState extends State<TransferItemWidget>
       final isFailed = widget.task.status == TransferStatus.failed;
       actions.add(
         _buildActionButton(
-          icon: isFailed ? Icons.refresh : Icons.play_arrow,
+          icon: isFailed
+              ? PhosphorIconsRegular.arrowCounterClockwise
+              : PhosphorIconsRegular.play,
           label: isFailed ? '重试' : '继续',
           onTap: widget.onResume,
           color: Colors.green,
@@ -405,7 +419,7 @@ class _TransferItemWidgetState extends State<TransferItemWidget>
     if (widget.task.canCancel) {
       actions.add(
         _buildActionButton(
-          icon: Icons.close,
+          icon: PhosphorIconsRegular.x,
           label: '取消',
           onTap: widget.onCancel,
           color: Colors.red,
@@ -419,7 +433,7 @@ class _TransferItemWidgetState extends State<TransferItemWidget>
       if (widget.task.direction == TransferDirection.receive) {
         actions.add(
           _buildActionButton(
-            icon: Icons.open_in_new,
+          icon: PhosphorIconsRegular.arrowSquareOut,
             label: '打开',
             onTap: widget.onOpen,
             color: Colors.blue,
@@ -432,7 +446,7 @@ class _TransferItemWidgetState extends State<TransferItemWidget>
     if (!widget.task.isActive) {
       actions.add(
         _buildActionButton(
-          icon: Icons.delete_outline,
+          icon: PhosphorIconsRegular.trashSimple,
           label: '删除',
           onTap: widget.onRemove,
           color: Colors.grey,
@@ -454,7 +468,11 @@ class _TransferItemWidgetState extends State<TransferItemWidget>
             ),
             child: Row(
               children: [
-                Icon(Icons.error_outline, size: 14, color: Colors.red.shade700),
+                PhosphorIcon(
+                  PhosphorIconsRegular.warningCircle,
+                  size: 14,
+                  color: Colors.red.shade700,
+                ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
@@ -506,7 +524,7 @@ class _TransferItemWidgetState extends State<TransferItemWidget>
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, size: 16, color: color),
+               PhosphorIcon(icon, size: 16, color: color),
               const SizedBox(width: 4),
               Text(
                 label,
@@ -534,11 +552,11 @@ class EmptyTransferWidget extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            Icons.swap_horiz,
-            size: 64,
-            color: Colors.grey.shade300,
-          ),
+           PhosphorIcon(
+             PhosphorIconsRegular.arrowsLeftRight,
+             size: 64,
+             color: Colors.grey.shade300,
+           ),
           const SizedBox(height: 16),
           Text(
             '暂无传输任务',

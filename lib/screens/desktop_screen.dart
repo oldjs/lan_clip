@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/device.dart';
 import '../models/clipboard_data.dart';
+import '../models/received_message.dart';
 import '../services/discovery_service.dart';
 import '../services/socket_service.dart';
 import '../services/clipboard_service.dart';
@@ -19,6 +20,10 @@ import 'settings_screen.dart';
 import 'file_transfer_screen.dart';
 import '../services/file_transfer_service.dart';
 import '../models/file_transfer.dart';
+import '../widgets/desktop/desktop_app_bar.dart';
+import '../widgets/desktop/desktop_background.dart';
+import '../widgets/desktop/desktop_history_panel.dart';
+import '../widgets/desktop/desktop_status_card.dart';
 
 /// 电脑端界面 - 接收内容并写入剪切板
 class DesktopScreen extends StatefulWidget {
@@ -48,7 +53,7 @@ class _DesktopScreenState extends State<DesktopScreen>
   SecretKey? _encryptionKey;
 
   bool _syncToMobile = false;     // 同步剪贴板到手机
-  final List<_ReceivedMessage> _messages = [];
+  final List<ReceivedMessage> _messages = [];
   final List<Device> _connectedDevices = []; // 已连接的手机设备
   
   StreamSubscription<AuthResult>? _messageSubscription;
@@ -278,7 +283,7 @@ class _DesktopScreenState extends State<DesktopScreen>
     
     // 添加到消息列表
     setState(() {
-      _messages.insert(0, _ReceivedMessage(
+      _messages.insert(0, ReceivedMessage(
         content: message,
         time: DateTime.now(),
       ));
@@ -470,211 +475,54 @@ class _DesktopScreenState extends State<DesktopScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('LAN Clip - 接收端'),
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        actions: [
-              // 设置入口
-              IconButton(
-                icon: const Icon(Icons.settings),
-                tooltip: '设置',
-                onPressed: _openSettings,
-              ),
-              // 文件传输入口
-              IconButton(
-                icon: Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    const Icon(Icons.folder_shared),
-                    if (_activeTransferCount > 0)
-                      Positioned(
-                        right: -4,
-                        top: -4,
-                        child: Container(
-                          padding: const EdgeInsets.all(2),
-                          decoration: const BoxDecoration(
-                            color: Colors.red,
-                            shape: BoxShape.circle,
-                          ),
-                          constraints: const BoxConstraints(
-                            minWidth: 16,
-                            minHeight: 16,
-                          ),
-                          child: Text(
-                            '$_activeTransferCount',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 10,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-                tooltip: '文件传输',
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const FileTransferScreen(),
-                    ),
-                  );
-                },
-              ),
-              // 最小化到托盘按钮
-          if (Platform.isWindows)
-            IconButton(
-              icon: const Icon(Icons.minimize),
-              tooltip: '最小化到托盘',
-              onPressed: () => windowManager.hide(),
+      appBar: DesktopAppBar(
+        activeTransferCount: _activeTransferCount,
+        onOpenSettings: _openSettings,
+        onOpenTransfer: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const FileTransferScreen(),
             ),
-        ],
+          );
+        },
+        onMinimize: Platform.isWindows ? () => windowManager.hide() : null,
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // 服务状态卡片
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(
-                          _isRunning ? Icons.check_circle : Icons.error,
-                          color: _isRunning ? Colors.green : Colors.red,
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          _isRunning ? '服务运行中' : '服务未启动',
-                          style: const TextStyle(fontSize: 18),
-                        ),
-                      ],
-                    ),
-                    const Divider(),
-                    _buildInfoRow('本机 IP', _localIp),
-                    _buildInfoRow('发现端口 (UDP)', '9999'),
-                    _buildInfoRow('通信端口 (TCP)', '$_tcpPort'),
-                    const SizedBox(height: 8),
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.blue.shade50,
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: const Row(
-                        children: [
-                          Icon(Icons.info_outline, size: 16, color: Colors.blue),
-                          SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              '关闭窗口会最小化到托盘，右键托盘图标可退出',
-                              style: TextStyle(color: Colors.blue, fontSize: 12),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            
-            // 接收历史标题栏
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  '接收历史',
-                  style: TextStyle(fontSize: 16),
-                ),
-                Row(
-                  children: [
-                    if (_messages.isNotEmpty)
-                      TextButton(
-                        onPressed: () {
-                          setState(() => _messages.clear());
-                        },
-                        child: const Text('清空'),
-                      ),
-                    Switch(
-                      value: _showHistory,
-                      onChanged: (v) => setState(() => _showHistory = v),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            if (_showHistory)
-              SizedBox(
-                height: 400,
-                child: Card(
-                  child: _messages.isEmpty
-                      ? const Center(
-                          child: Text(
-                            '暂无记录',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(color: Colors.grey),
-                          ),
-                        )
-                      : ListView.separated(
-                          padding: const EdgeInsets.all(8),
-                          itemCount: _messages.length,
-                          separatorBuilder: (_, _) => const Divider(height: 1),
-                          itemBuilder: (context, index) {
-                            final msg = _messages[index];
-                            return ListTile(
-                              title: Text(
-                                msg.content,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              subtitle: Text(_formatTime(msg.time)),
-                              trailing: IconButton(
-                                icon: const Icon(Icons.copy),
-                                onPressed: () async {
-                                  await ClipboardService.copy(msg.content);
-                                },
-                              ),
-                              onTap: () => _showMessageDetail(msg),
-                            );
-                          },
-                        ),
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildInfoRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4.0),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      body: Stack(
         children: [
-          Text(label, style: const TextStyle(color: Colors.grey)),
-          SelectableText(value),
+          const DesktopBackground(),
+          SafeArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  DesktopStatusCard(
+                    isRunning: _isRunning,
+                    localIp: _localIp,
+                    tcpPort: _tcpPort,
+                  ),
+                  const SizedBox(height: 20),
+                  DesktopHistoryPanel(
+                    showHistory: _showHistory,
+                    messages: _messages,
+                    onClear: () => setState(() => _messages.clear()),
+                    onToggle: (value) => setState(() => _showHistory = value),
+                    onCopy: (message) async {
+                      await ClipboardService.copy(message.content);
+                    },
+                    onOpen: _showMessageDetail,
+                  ),
+                ],
+              ),
+            ),
+          ),
         ],
       ),
     );
   }
 
-  String _formatTime(DateTime time) {
-    return '${time.hour.toString().padLeft(2, '0')}:'
-           '${time.minute.toString().padLeft(2, '0')}:'
-           '${time.second.toString().padLeft(2, '0')}';
-  }
-
-  void _showMessageDetail(_ReceivedMessage msg) {
+  void _showMessageDetail(ReceivedMessage msg) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -699,12 +547,10 @@ class _DesktopScreenState extends State<DesktopScreen>
       ),
     );
   }
-}
 
-/// 接收的消息
-class _ReceivedMessage {
-  final String content;
-  final DateTime time;
-
-  _ReceivedMessage({required this.content, required this.time});
+  String _formatTime(DateTime time) {
+    return '${time.hour.toString().padLeft(2, '0')}:'
+        '${time.minute.toString().padLeft(2, '0')}:'
+        '${time.second.toString().padLeft(2, '0')}';
+  }
 }

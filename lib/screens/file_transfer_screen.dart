@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:open_filex/open_filex.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../models/file_transfer.dart';
 import '../models/device.dart';
 import '../services/file_transfer_service.dart';
@@ -266,7 +267,10 @@ class _FileTransferScreenState extends State<FileTransferScreen>
             // 下载目录
             Row(
               children: [
-                const Icon(Icons.folder_open, size: 18),
+                PhosphorIcon(
+                  PhosphorIconsRegular.folderOpen,
+                  size: 18,
+                ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
@@ -277,12 +281,18 @@ class _FileTransferScreenState extends State<FileTransferScreen>
                   ),
                 ),
                 IconButton(
-                  icon: const Icon(Icons.edit, size: 18),
+                  icon: PhosphorIcon(
+                    PhosphorIconsRegular.pencilSimple,
+                    size: 18,
+                  ),
                   tooltip: '修改目录',
                   onPressed: canEditPath ? _pickDownloadFolder : null,
                 ),
                 IconButton(
-                  icon: const Icon(Icons.open_in_new, size: 18),
+                  icon: PhosphorIcon(
+                    PhosphorIconsRegular.arrowSquareOut,
+                    size: 18,
+                  ),
                   tooltip: '打开目录',
                   onPressed: _openDownloadFolder,
                 ),
@@ -293,7 +303,10 @@ class _FileTransferScreenState extends State<FileTransferScreen>
             // 安全状态
             Row(
               children: [
-                const Icon(Icons.shield, size: 18),
+                PhosphorIcon(
+                  PhosphorIconsRegular.shieldCheck,
+                  size: 18,
+                ),
                 const SizedBox(width: 8),
                 const Text('安全', style: TextStyle(fontSize: 12)),
                 const SizedBox(width: 8),
@@ -337,18 +350,17 @@ class _FileTransferScreenState extends State<FileTransferScreen>
     return Scaffold(
       appBar: AppBar(
         title: const Text('文件传输'),
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         actions: [
           // 打开下载目录
           IconButton(
-            icon: const Icon(Icons.folder_open),
+            icon: PhosphorIcon(PhosphorIconsRegular.folderOpen),
             tooltip: '打开下载目录',
             onPressed: _openDownloadFolder,
           ),
           // 清空已完成
           if (_allTasks.any((t) => !t.isActive))
             IconButton(
-              icon: const Icon(Icons.cleaning_services),
+              icon: PhosphorIcon(PhosphorIconsRegular.trashSimple),
               tooltip: '清空已完成',
               onPressed: () {
                 _transferService.clearCompletedTasks();
@@ -375,7 +387,7 @@ class _FileTransferScreenState extends State<FileTransferScreen>
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.upload, size: 16),
+                  PhosphorIcon(PhosphorIconsRegular.uploadSimple, size: 16),
                   const SizedBox(width: 4),
                   const Text('发送'),
                   if (_sendingTasks.isNotEmpty) ...[
@@ -389,7 +401,7 @@ class _FileTransferScreenState extends State<FileTransferScreen>
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.download, size: 16),
+                  PhosphorIcon(PhosphorIconsRegular.downloadSimple, size: 16),
                   const SizedBox(width: 4),
                   const Text('接收'),
                   if (_receivingTasks.isNotEmpty) ...[
@@ -420,12 +432,12 @@ class _FileTransferScreenState extends State<FileTransferScreen>
       floatingActionButton: widget.selectedDevice != null
           ? FloatingActionButton.extended(
               onPressed: _pickAndSendFiles,
-              icon: const Icon(Icons.send),
+              icon: PhosphorIcon(PhosphorIconsRegular.paperPlaneRight),
               label: const Text('发送文件'),
             )
           : FloatingActionButton.extended(
               onPressed: () => _showSnackBar('请先连接设备'),
-              icon: const Icon(Icons.link_off),
+              icon: PhosphorIcon(PhosphorIconsRegular.linkSimpleBreak),
               label: const Text('未连接'),
               backgroundColor: Colors.grey,
             ),

@@ -4,11 +4,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:launch_at_startup/launch_at_startup.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:open_filex/open_filex.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../services/auth_service.dart';
 import '../services/encryption_service.dart';
 import '../services/overlay_service.dart';
 import '../services/file_transfer_service.dart';
 import '../main.dart' show startHiddenKey;
+import '../widgets/settings/settings_tiles.dart';
 
 // SharedPreferences 键名
 const String _autoPasteKey = 'auto_paste_enabled';
@@ -443,45 +445,50 @@ class _SettingsScreenState extends State<SettingsScreen> {
               padding: const EdgeInsets.all(16),
               children: [
                 // 剪贴板设置组
-                _buildSectionHeader('剪贴板'),
-                Card(
-                  child: Column(
-                    children: [
-                      // 桌面端设置
-                      if (isDesktop) ...[
-                        _buildSwitchTile(
+                 const SettingsSectionHeader(title: '剪贴板'),
+                 Card(
+                   child: Column(
+                     children: [
+                       // 桌面端设置
+                       if (isDesktop) ...[
+                        SettingsSwitchTile(
                           title: '自动粘贴',
                           subtitle: '收到内容后自动在光标位置粘贴',
+                          icon: PhosphorIconsRegular.clipboardText,
                           value: _autoPaste,
                           onChanged: _setAutoPaste,
                         ),
                         const Divider(height: 1),
-                        _buildSwitchTile(
+                        SettingsSwitchTile(
                           title: '同步到手机',
                           subtitle: '复制内容自动同步到已连接的手机',
+                          icon: PhosphorIconsRegular.linkSimple,
                           value: _syncToMobile,
                           onChanged: _setSyncToMobile,
                         ),
                       ],
                       // 手机端设置
                       if (!isDesktop) ...[
-                        _buildSwitchTile(
+                        SettingsSwitchTile(
                           title: '接收PC剪贴板',
                           subtitle: '允许电脑推送剪贴板内容到手机',
+                          icon: PhosphorIconsRegular.downloadSimple,
                           value: _receiveFromPc,
                           onChanged: _setReceiveFromPc,
                         ),
                         const Divider(height: 1),
-                        _buildSwitchTile(
+                        SettingsSwitchTile(
                           title: '自动发送',
                           subtitle: '停止输入后自动发送到电脑',
+                          icon: PhosphorIconsRegular.uploadSimple,
                           value: _autoSendEnabled,
                           onChanged: _setAutoSendEnabled,
                         ),
                         if (_autoSendEnabled) ...[
                           const Divider(height: 1),
-                          _buildSliderTile(
+                          SettingsSliderTile(
                             title: '发送延迟',
+                            icon: PhosphorIconsRegular.clockCounterClockwise,
                             value: _autoSendDelay,
                             min: 0.5,
                             max: 10.0,
@@ -498,60 +505,69 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 const SizedBox(height: 16),
 
                 // 触摸板设置组（仅手机端）
-                if (!isDesktop) ...[
-                  _buildSectionHeader('触摸板'),
-                  Card(
-                    child: _buildSliderTile(
-                      title: '灵敏度',
-                      value: _touchpadSensitivity,
-                      min: 0.5,
-                      max: 3.0,
-                      divisions: 25,
-                      suffix: 'x',
-                      onChanged: (v) => setState(() => _touchpadSensitivity = v),
-                      onChangeEnd: _setTouchpadSensitivity,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  
-                  // 悬浮窗设置组（仅 Android）
-                  if (Platform.isAndroid) ...[
-                    _buildSectionHeader('悬浮窗'),
-                    Card(
-                      child: _buildSwitchTile(
-                        title: '启用悬浮窗',
-                        subtitle: _overlayEnabled ? '游戏时可快捷发送内容' : '开启后可在其他应用上显示快捷窗口',
-                        value: _overlayEnabled,
-                        onChanged: _setOverlayEnabled,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                  ],
-                ],
+                 if (!isDesktop) ...[
+                   const SettingsSectionHeader(title: '触摸板'),
+                   Card(
+                     child: SettingsSliderTile(
+                       title: '灵敏度',
+                       icon: PhosphorIconsRegular.handTap,
+                       value: _touchpadSensitivity,
+                       min: 0.5,
+                       max: 3.0,
+                       divisions: 25,
+                       suffix: 'x',
+                       onChanged: (v) => setState(() => _touchpadSensitivity = v),
+                       onChangeEnd: _setTouchpadSensitivity,
+                     ),
+                   ),
+                   const SizedBox(height: 16),
+                   
+                   // 悬浮窗设置组（仅 Android）
+                   if (Platform.isAndroid) ...[
+                     const SettingsSectionHeader(title: '悬浮窗'),
+                     Card(
+                       child: SettingsSwitchTile(
+                         title: '启用悬浮窗',
+                         subtitle: _overlayEnabled ? '游戏时可快捷发送内容' : '开启后可在其他应用上显示快捷窗口',
+                         icon: PhosphorIconsRegular.appWindow,
+                         value: _overlayEnabled,
+                         onChanged: _setOverlayEnabled,
+                       ),
+                     ),
+                     const SizedBox(height: 16),
+                   ],
+                 ],
 
                 // 安全设置组
-                _buildSectionHeader('安全'),
-                Card(
-                  child: Column(
-                    children: [
-                      _buildSwitchTile(
+                 const SettingsSectionHeader(title: '安全'),
+                 Card(
+                   child: Column(
+                     children: [
+                      SettingsSwitchTile(
                         title: '密码保护',
                         subtitle: _passwordEnabled ? '已启用，连接需要密码' : '未启用，任何人都可连接',
+                        icon: PhosphorIconsRegular.lockSimple,
                         value: _passwordEnabled,
                         onChanged: _setPasswordEnabled,
                       ),
                       if (_passwordEnabled) ...[
                         const Divider(height: 1),
                         ListTile(
+                          leading: PhosphorIcon(
+                            PhosphorIconsRegular.key,
+                            size: 20,
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
                           title: const Text('修改密码'),
                           trailing: const Icon(Icons.chevron_right),
                           onTap: _changePassword,
                         ),
                       ],
                       const Divider(height: 1),
-                      _buildSwitchTile(
+                      SettingsSwitchTile(
                         title: '加密传输',
                         subtitle: _encryptionEnabled ? '已启用端到端加密' : '数据以明文传输',
+                        icon: PhosphorIconsRegular.shieldCheck,
                         value: _encryptionEnabled,
                         onChanged: _setEncryptionEnabled,
                       ),
@@ -561,13 +577,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 const SizedBox(height: 16),
 
                 // 文件传输设置组
-                _buildSectionHeader('文件传输'),
+                const SettingsSectionHeader(title: '文件传输'),
                 Card(
                   child: Column(
                     children: [
                       // 下载目录
                       ListTile(
-                        leading: const Icon(Icons.folder),
+                        leading: PhosphorIcon(
+                          PhosphorIconsRegular.folderOpen,
+                          size: 20,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
                         title: const Text('下载目录'),
                         subtitle: Text(
                           _downloadPath,
@@ -581,12 +601,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             // 桌面端显示编辑按钮
                             if (!Platform.isAndroid && !Platform.isIOS)
                               IconButton(
-                                icon: const Icon(Icons.edit, size: 20),
+                                icon: PhosphorIcon(
+                                  PhosphorIconsRegular.pencilSimple,
+                                  size: 18,
+                                ),
                                 tooltip: '修改',
                                 onPressed: _pickDownloadPath,
                               ),
                             IconButton(
-                              icon: const Icon(Icons.open_in_new, size: 20),
+                              icon: PhosphorIcon(
+                                PhosphorIconsRegular.arrowSquareOut,
+                                size: 18,
+                              ),
                               tooltip: '打开',
                               onPressed: _openDownloadFolder,
                             ),
@@ -597,7 +623,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       const Divider(height: 1),
                       // 缓存大小和清理
                       ListTile(
-                        leading: const Icon(Icons.cleaning_services),
+                        leading: PhosphorIcon(
+                          PhosphorIconsRegular.trashSimple,
+                          size: 20,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
                         title: const Text('清理缓存'),
                         subtitle: Text(
                           '已用空间: ${_formatBytes(_cacheSize)}',
@@ -615,20 +645,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
                 // 启动设置组（仅桌面端）
                 if (isDesktop) ...[
-                  _buildSectionHeader('启动'),
+                  const SettingsSectionHeader(title: '启动'),
                   Card(
                     child: Column(
                       children: [
-                        _buildSwitchTile(
+                        SettingsSwitchTile(
                           title: '开机自启',
                           subtitle: '开机后自动启动程序',
+                          icon: PhosphorIconsRegular.power,
                           value: _launchAtStartup,
                           onChanged: _setLaunchAtStartup,
                         ),
                         const Divider(height: 1),
-                        _buildSwitchTile(
+                        SettingsSwitchTile(
                           title: '启动时隐藏',
                           subtitle: '启动后自动最小化到系统托盘',
+                          icon: PhosphorIconsRegular.eyeSlash,
                           value: _startHidden,
                           onChanged: _setStartHidden,
                         ),
@@ -638,78 +670,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ],
               ],
             ),
-    );
-  }
-
-  /// 构建分组标题
-  Widget _buildSectionHeader(String title) {
-    return Padding(
-      padding: const EdgeInsets.only(left: 4, bottom: 8),
-      child: Text(
-        title,
-        style: TextStyle(
-          fontSize: 14,
-          fontWeight: FontWeight.w500,
-          color: Theme.of(context).colorScheme.primary,
-        ),
-      ),
-    );
-  }
-
-  /// 构建开关设置项
-  Widget _buildSwitchTile({
-    required String title,
-    required String subtitle,
-    required bool value,
-    required Function(bool) onChanged,
-  }) {
-    return SwitchListTile(
-      title: Text(title),
-      subtitle: Text(
-        subtitle,
-        style: const TextStyle(fontSize: 12, color: Colors.grey),
-      ),
-      value: value,
-      onChanged: onChanged,
-    );
-  }
-
-  /// 构建滑块设置项
-  Widget _buildSliderTile({
-    required String title,
-    required double value,
-    required double min,
-    required double max,
-    required int divisions,
-    required String suffix,
-    required Function(double) onChanged,
-    required Function(double) onChangeEnd,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(title),
-              Text(
-                '${value.toStringAsFixed(1)}$suffix',
-                style: TextStyle(color: Theme.of(context).colorScheme.primary),
-              ),
-            ],
-          ),
-          Slider(
-            value: value,
-            min: min,
-            max: max,
-            divisions: divisions,
-            onChanged: onChanged,
-            onChangeEnd: onChangeEnd,
-          ),
-        ],
-      ),
     );
   }
 }

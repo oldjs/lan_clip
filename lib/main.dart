@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'screens/mobile_screen.dart';
 import 'screens/desktop_screen.dart';
 import 'overlay/overlay_widget.dart';
+import 'theme/desktop_theme.dart';
 
 // 是否为开机自启
 bool isAutoStart = false;
@@ -92,7 +93,10 @@ class MyApp extends StatelessWidget {
   Widget _buildHomeScreen() {
     // Windows/macOS/Linux 作为接收端
     if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
-      return const DesktopScreen();
+      return Theme(
+        data: DesktopTheme.build(),
+        child: const DesktopScreen(),
+      );
     }
     // Android/iOS 作为发送端
     return const MobileScreen();
