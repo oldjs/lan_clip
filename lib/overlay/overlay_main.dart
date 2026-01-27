@@ -10,11 +10,14 @@ void overlayMain() {
   
   // 启动悬浮窗应用
   runApp(
-    const MaterialApp(
+    MaterialApp(
       debugShowCheckedModeBanner: false,
-      // 使用浅色主题
       themeMode: ThemeMode.light,
-      home: OverlayWidget(),
+      // 添加 Scaffold 支持 SnackBar 等 Material 组件
+      home: const Scaffold(
+        backgroundColor: Colors.transparent,
+        body: OverlayWidget(),
+      ),
     ),
   );
 }

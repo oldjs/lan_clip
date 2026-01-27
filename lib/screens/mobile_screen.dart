@@ -270,6 +270,9 @@ class _MobileScreenState extends State<MobileScreen> {
         final salt = _selectedDevice!.salt ?? '';
         passwordHash = AuthService.hashPassword(password, salt);
         _devicePasswords[deviceKey] = passwordHash; // 缓存密码哈希
+        // 保存密码哈希供悬浮窗使用
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('overlay_password_hash', passwordHash);
         if (_encryptionEnabled) {
           // 使用密码哈希派生密钥，确保与电脑端一致
           _encryptionKey = await EncryptionService.deriveKey(passwordHash);
@@ -382,6 +385,9 @@ class _MobileScreenState extends State<MobileScreen> {
         final salt = _selectedDevice!.salt ?? '';
         passwordHash = AuthService.hashPassword(password, salt);
         _devicePasswords[deviceKey] = passwordHash;
+        // 保存密码哈希供悬浮窗使用
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('overlay_password_hash', passwordHash);
         if (_encryptionEnabled) {
           // 使用密码哈希派生密钥，确保与电脑端一致
           _encryptionKey = await EncryptionService.deriveKey(passwordHash);

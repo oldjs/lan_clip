@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_overlay_window/flutter_overlay_window.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:cryptography/cryptography.dart';
 import 'dart:convert';
 import '../services/text_memory_service.dart';
 import '../services/socket_service.dart';
+import '../services/encryption_service.dart';
 
 /// 悬浮窗 UI 组件，支持折叠态和展开态
 class OverlayWidget extends StatefulWidget {
@@ -23,6 +25,14 @@ class _OverlayWidgetState extends State<OverlayWidget> {
   int _memoryCount = 0;
   bool _showMemoryList = false;
   List<TextMemory> _memories = [];
+  
+  // 加密和认证相关
+  bool _encryptionEnabled = false;
+  SecretKey? _encryptionKey;
+  String? _passwordHash;
+  
+  // Toast 显示控制
+  OverlayEntry? _toastEntry;
 
   @override
   void initState() {
@@ -33,29 +43,50 @@ class _OverlayWidgetState extends State<OverlayWidget> {
   @override
   void dispose() {
     _textController.dispose();
+    _toastEntry?.remove();
     super.dispose();
   }
 
-  /// 加载存储的设备信息并刷新记忆计数
-  /// 强制 reload 确保读取最新数据（与首页同步）
+  /// 加载存储的设备信息、加密设置和密码哈希
   Future<void> _loadData() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.reload(); // 强制重新加载，解决与首页数据不同步问题
+    await prefs.reload();
+    
+    // 加载设备信息
     final deviceJson = prefs.getString('overlay_selected_device');
     if (deviceJson != null) {
-      setState(() {
-        _selectedDevice = jsonDecode(deviceJson);
-      });
+      _selectedDevice = jsonDecode(deviceJson);
     }
+    
+    // 加载加密设置
+    _encryptionEnabled = await EncryptionService.isEncryptionEnabled();
+    
+    // 加载密码哈希（主应用保存的）
+    _passwordHash = prefs.getString('overlay_password_hash');
+    
+    // 如果有密码哈希且启用加密，派生密钥
+    if (_passwordHash != null && _passwordHash!.isNotEmpty && _encryptionEnabled) {
+      _encryptionKey = await EncryptionService.deriveKey(_passwordHash!);
+    }
+    
+    setState(() {});
     _refreshMemoryCount();
   }
 
-  /// 获取本地记忆总数（强制 reload）
+  /// 获取本地记忆总数
   Future<void> _refreshMemoryCount() async {
-    await _memoryService.reload(); // 确保读取最新数据
+    await _memoryService.reload();
     final count = await _memoryService.getCount();
     setState(() {
       _memoryCount = count;
+    });
+  }
+  
+  /// 刷新记忆列表
+  Future<void> _refreshMemoryList() async {
+    final memories = await _memoryService.getAll();
+    setState(() {
+      _memories = memories;
     });
   }
 
@@ -66,11 +97,11 @@ class _OverlayWidgetState extends State<OverlayWidget> {
       _showMemoryList = false;
     });
     if (_isExpanded) {
-      // 展开时重新加载数据，确保与首页同步
       await _loadData();
       await FlutterOverlayWindow.resizeOverlay(240, 320, true);
     } else {
-      await FlutterOverlayWindow.resizeOverlay(56, 56, true);
+      // 修复: 折叠尺寸与小球实际尺寸一致 (48x48)
+      await FlutterOverlayWindow.resizeOverlay(48, 48, true);
     }
   }
 
@@ -78,19 +109,28 @@ class _OverlayWidgetState extends State<OverlayWidget> {
   Future<void> _handleSend(String content) async {
     if (content.isEmpty) return;
     if (_selectedDevice == null) {
-      _showStatus('请先在主应用选择设备');
+      _showToast('请先在主应用选择设备');
       return;
     }
 
     final String ip = _selectedDevice!['ip'];
     final int port = _selectedDevice!['port'];
     
-    final result = await _socketService.sendMessage(ip, port, content);
+    // 设置加密
+    _socketService.setEncryption(enabled: _encryptionEnabled, key: _encryptionKey);
+    
+    final result = await _socketService.sendMessage(
+      ip, 
+      port, 
+      content,
+      passwordHash: _passwordHash,
+    );
+    
     if (result.success) {
       _textController.clear();
-      _showStatus('发送成功');
+      _showToast('发送成功');
     } else {
-      _showStatus('发送失败');
+      _showToast('发送失败: ${result.error ?? "未知错误"}');
     }
   }
 
@@ -101,27 +141,44 @@ class _OverlayWidgetState extends State<OverlayWidget> {
     await _memoryService.add(content);
     _textController.clear();
     _refreshMemoryCount();
-    _showStatus('已暂存');
+    _showToast('已暂存');
   }
 
   /// 发送记忆内容并删除
   Future<void> _handleSendMemory(TextMemory memory) async {
     if (_selectedDevice == null) {
-      _showStatus('请先在主应用选择设备');
+      _showToast('请先在主应用选择设备');
       return;
     }
     
     final String ip = _selectedDevice!['ip'];
     final int port = _selectedDevice!['port'];
     
-    final result = await _socketService.sendMessage(ip, port, memory.content);
+    _socketService.setEncryption(enabled: _encryptionEnabled, key: _encryptionKey);
+    
+    final result = await _socketService.sendMessage(
+      ip, 
+      port, 
+      memory.content,
+      passwordHash: _passwordHash,
+    );
+    
     if (result.success) {
       await _memoryService.delete(memory.id);
+      await _refreshMemoryList();
       _refreshMemoryCount();
-      _showStatus('发送成功');
+      _showToast('发送成功');
     } else {
-      _showStatus('发送失败');
+      _showToast('发送失败');
     }
+  }
+  
+  /// 删除记忆（不发送）
+  Future<void> _handleDeleteMemory(TextMemory memory) async {
+    await _memoryService.delete(memory.id);
+    await _refreshMemoryList();
+    _refreshMemoryCount();
+    _showToast('已删除');
   }
   
   /// 加载并显示记忆列表
@@ -133,14 +190,39 @@ class _OverlayWidgetState extends State<OverlayWidget> {
     });
   }
 
-  void _showStatus(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        duration: const Duration(seconds: 1),
-        behavior: SnackBarBehavior.floating,
+  /// 显示自定义 Toast（比 SnackBar 更稳定）
+  void _showToast(String message) {
+    _toastEntry?.remove();
+    
+    _toastEntry = OverlayEntry(
+      builder: (context) => Positioned(
+        bottom: 60,
+        left: 20,
+        right: 20,
+        child: Material(
+          color: Colors.transparent,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            decoration: BoxDecoration(
+              color: Colors.black87,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              message,
+              style: const TextStyle(color: Colors.white, fontSize: 12),
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ),
       ),
     );
+    
+    Overlay.of(context).insert(_toastEntry!);
+    
+    Future.delayed(const Duration(seconds: 2), () {
+      _toastEntry?.remove();
+      _toastEntry = null;
+    });
   }
 
   @override
@@ -154,7 +236,7 @@ class _OverlayWidgetState extends State<OverlayWidget> {
     );
   }
 
-  /// 折叠状态: 悬浮小球
+  /// 折叠状态: 悬浮小球 (48x48)
   Widget _buildCollapsedView() {
     return GestureDetector(
       onTap: _toggleExpand,
@@ -370,7 +452,7 @@ class _OverlayWidgetState extends State<OverlayWidget> {
     );
   }
 
-  /// 记忆列表
+  /// 记忆列表（支持长按删除）
   Widget _buildMemoryListView() {
     if (_memories.isEmpty) {
       return Center(
@@ -383,12 +465,15 @@ class _OverlayWidgetState extends State<OverlayWidget> {
       separatorBuilder: (context, index) => const SizedBox(height: 8),
       itemBuilder: (context, index) {
         final memory = _memories[index];
-        return InkWell(
+        return GestureDetector(
           onTap: () async {
             await _handleSendMemory(memory);
-            setState(() => _showMemoryList = false);
+            if (_memories.isEmpty) {
+              setState(() => _showMemoryList = false);
+            }
           },
-          borderRadius: BorderRadius.circular(8),
+          // 长按删除
+          onLongPress: () => _showDeleteConfirm(memory),
           child: Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
@@ -413,6 +498,34 @@ class _OverlayWidgetState extends State<OverlayWidget> {
           ),
         );
       },
+    );
+  }
+  
+  /// 显示删除确认
+  void _showDeleteConfirm(TextMemory memory) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('删除记忆', style: TextStyle(fontSize: 16)),
+        content: Text(
+          '确定删除这条记忆吗？\n\n"${memory.content.length > 50 ? '${memory.content.substring(0, 50)}...' : memory.content}"',
+          style: const TextStyle(fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _handleDeleteMemory(memory);
+            },
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
     );
   }
 }
