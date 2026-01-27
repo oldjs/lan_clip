@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:launch_at_startup/launch_at_startup.dart';
 import '../services/auth_service.dart';
 import '../services/encryption_service.dart';
+import '../services/overlay_service.dart';
 import '../main.dart' show startHiddenKey;
 
 // SharedPreferences 键名
@@ -67,6 +68,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   // 启动设置
   bool _launchAtStartup = false;
   bool _startHidden = false;
+  
+  // 悬浮窗设置 (仅 Android)
+  bool _overlayEnabled = false;
 
   bool _isLoading = true;
 
@@ -110,6 +114,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
       _isLoading = false;
     });
+    
+    // 加载悬浮窗状态 (Android)
+    if (Platform.isAndroid) {
+      final overlayActive = await OverlayService.isActive();
+      setState(() => _overlayEnabled = overlayActive);
+    }
   }
 
   // ============== 设置项修改方法 ==============
@@ -196,6 +206,73 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await prefs.setBool(startHiddenKey, value);
     setState(() => _startHidden = value);
     widget.callbacks?.onStartHiddenChanged?.call(value);
+  }
+  
+  /// 设置悬浮窗开关
+  Future<void> _setOverlayEnabled(bool value) async {
+    if (!Platform.isAndroid) return;
+    
+    if (value) {
+      // 检查权限
+      final hasPermission = await OverlayService.checkPermission();
+      if (!hasPermission) {
+        // 显示权限说明对话框
+        final shouldRequest = await _showOverlayPermissionDialog();
+        if (shouldRequest == true) {
+          await OverlayService.requestPermission();
+          // 用户从设置返回后再次检查
+          await Future.delayed(const Duration(milliseconds: 500));
+          final granted = await OverlayService.checkPermission();
+          if (!granted) {
+            _showSnackBar('请在系统设置中允许悬浮窗权限');
+            return;
+          }
+        } else {
+          return;
+        }
+      }
+      // 显示悬浮窗
+      await OverlayService.showOverlay();
+      setState(() => _overlayEnabled = true);
+    } else {
+      // 关闭悬浮窗
+      await OverlayService.closeOverlay();
+      setState(() => _overlayEnabled = false);
+    }
+  }
+  
+  /// 显示悬浮窗权限说明对话框
+  Future<bool?> _showOverlayPermissionDialog() {
+    return showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('悬浮窗权限'),
+        content: const Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('开启悬浮窗功能需要以下权限：'),
+            SizedBox(height: 12),
+            Text('- 显示在其他应用上层', style: TextStyle(fontSize: 14)),
+            SizedBox(height: 8),
+            Text(
+              '此权限用于在您使用其他应用（如游戏）时，显示快捷发送窗口。',
+              style: TextStyle(color: Colors.grey, fontSize: 12),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('去设置'),
+          ),
+        ],
+      ),
+    );
   }
 
   /// 显示设置密码对话框
@@ -348,6 +425,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
+                  
+                  // 悬浮窗设置组（仅 Android）
+                  if (Platform.isAndroid) ...[
+                    _buildSectionHeader('悬浮窗'),
+                    Card(
+                      child: _buildSwitchTile(
+                        title: '启用悬浮窗',
+                        subtitle: _overlayEnabled ? '游戏时可快捷发送内容' : '开启后可在其他应用上显示快捷窗口',
+                        value: _overlayEnabled,
+                        onChanged: _setOverlayEnabled,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
                 ],
 
                 // 安全设置组

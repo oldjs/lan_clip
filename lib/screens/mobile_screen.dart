@@ -14,7 +14,9 @@ import '../services/mobile_clipboard_helper.dart';
 import 'touchpad_screen.dart';
 import 'simple_input_screen.dart';
 import 'settings_screen.dart';
+import 'text_memory_screen.dart';
 import '../services/input_method_service.dart';
+import '../services/text_memory_service.dart';
 
 // 自动发送设置的存储键
 const String _autoSendEnabledKey = 'auto_send_enabled';
@@ -35,6 +37,7 @@ class _MobileScreenState extends State<MobileScreen> {
   final _socketService = SocketService();
   final _clipboardSyncService = ClipboardSyncService();
   final _inputFocusNode = FocusNode(); // 输入框焦点
+  final _textMemoryService = TextMemoryService();
   
   final List<Device> _devices = [];
   Device? _selectedDevice;
@@ -58,6 +61,8 @@ class _MobileScreenState extends State<MobileScreen> {
   int _countdownSeconds = 0; // 倒计时剩余秒数
   Timer? _countdownTimer; // 倒计时显示定时器
   Timer? _longPressTimer; // 长按连续触发定时器
+  
+  int _memoryCount = 0; // 文本记忆数量
 
   @override
   void initState() {
@@ -87,9 +92,18 @@ class _MobileScreenState extends State<MobileScreen> {
   /// 初始化：加载设置 -> 搜索设备（确保顺序执行）
   Future<void> _initialize() async {
     await _loadSettings();
+    await _loadMemoryCount();
     // 设置加载完成后再搜索设备，确保 syncPort 已就绪
     if (mounted) {
       _searchDevices();
+    }
+  }
+  
+  /// 加载文本记忆数量
+  Future<void> _loadMemoryCount() async {
+    final count = await _textMemoryService.getCount();
+    if (mounted) {
+      setState(() => _memoryCount = count);
     }
   }
   
@@ -489,6 +503,49 @@ class _MobileScreenState extends State<MobileScreen> {
     );
   }
   
+  /// 暂存当前输入内容到本地
+  Future<void> _saveToMemory() async {
+    final text = _textController.text.trim();
+    if (text.isEmpty) {
+      _showSnackBar('请输入要暂存的内容');
+      return;
+    }
+    
+    await _textMemoryService.add(text);
+    _textController.clear();
+    await _loadMemoryCount();
+    _showSnackBar('已暂存');
+  }
+  
+  /// 保存设备信息供悬浮窗使用
+  Future<void> _saveDeviceForOverlay(Device? device) async {
+    if (device == null) return;
+    final prefs = await SharedPreferences.getInstance();
+    final deviceJson = '{"ip":"${device.ip}","port":${device.port},"name":"${device.name}"}';
+    await prefs.setString('overlay_selected_device', deviceJson);
+  }
+  
+  /// 打开文本记忆页面
+  void _openTextMemory() {
+    if (_selectedDevice == null) return;
+    
+    final deviceKey = '${_selectedDevice!.ip}:${_selectedDevice!.port}';
+    final passwordHash = _devicePasswords[deviceKey];
+    
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => TextMemoryScreen(
+          device: _selectedDevice!,
+          passwordHash: passwordHash,
+        ),
+      ),
+    ).then((_) {
+      // 返回时刷新记忆数量
+      _loadMemoryCount();
+    });
+  }
+  
   /// 打开设置页面
   void _openSettings() {
     Navigator.push(
@@ -663,6 +720,8 @@ class _MobileScreenState extends State<MobileScreen> {
                               }).toList(),
                               onChanged: (device) {
                                 setState(() => _selectedDevice = device);
+                                // 保存设备信息供悬浮窗使用
+                                _saveDeviceForOverlay(device);
                               },
                             ),
                         ],
@@ -727,7 +786,39 @@ class _MobileScreenState extends State<MobileScreen> {
                         ],
                       ),
                     ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 8),
+                  
+                  // 文本记忆入口按钮
+                  // 未连接时: 暂存按钮 / 已连接时: 进入记忆列表按钮
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      if (_selectedDevice == null)
+                        // 未连接 - 暂存按钮
+                        OutlinedButton.icon(
+                          onPressed: _saveToMemory,
+                          icon: const Icon(Icons.save_alt, size: 18),
+                          label: Text(_memoryCount > 0 ? '暂存 ($_memoryCount)' : '暂存'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.orange,
+                          ),
+                        )
+                      else
+                        // 已连接 - 进入记忆列表
+                        OutlinedButton.icon(
+                          onPressed: _memoryCount > 0 ? _openTextMemory : _saveToMemory,
+                          icon: Icon(
+                            _memoryCount > 0 ? Icons.inventory_2_outlined : Icons.save_alt,
+                            size: 18,
+                          ),
+                          label: Text(_memoryCount > 0 ? '记忆 ($_memoryCount)' : '暂存'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: _memoryCount > 0 ? Colors.green : Colors.orange,
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
                   
                   // 快捷操作按钮 - 第一行（退格/空格/回车支持长按连续触发）
                   Row(

@@ -450,10 +450,10 @@ class _TouchpadScreenState extends State<TouchpadScreen> {
   Widget _buildScrollButton({required bool isUp}) {
     return Listener(
       onPointerDown: (_) {
-        // 触碰立即滚动一次，然后每 80ms 连续滚动
-        final delta = isUp ? 3 : -3;
+        // 触碰立即滚动一次，然后每 150ms 连续滚动（delta=1 为最小滚动单位）
+        final delta = isUp ? 1 : -1;
         _sendCommand('CMD:MOUSE_SCROLL:$delta');
-        _scrollTimer = Timer.periodic(const Duration(milliseconds: 80), (_) {
+        _scrollTimer = Timer.periodic(const Duration(milliseconds: 150), (_) {
           _sendCommand('CMD:MOUSE_SCROLL:$delta');
         });
       },

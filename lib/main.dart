@@ -6,12 +6,26 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'screens/mobile_screen.dart';
 import 'screens/desktop_screen.dart';
+import 'overlay/overlay_widget.dart';
 
 // 是否为开机自启
 bool isAutoStart = false;
 
 // 启动时隐藏设置的存储键
 const String startHiddenKey = 'start_hidden';
+
+// 悬浮窗入口点 (Android)
+// 使用 @pragma("vm:entry-point") 确保 AOT 编译时不会被移除
+@pragma("vm:entry-point")
+void overlayMain() {
+  WidgetsFlutterBinding.ensureInitialized();
+  runApp(
+    const MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: OverlayWidget(),
+    ),
+  );
+}
 
 void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
