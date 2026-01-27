@@ -37,8 +37,10 @@ class _OverlayWidgetState extends State<OverlayWidget> {
   }
 
   /// 加载存储的设备信息并刷新记忆计数
+  /// 强制 reload 确保读取最新数据（与首页同步）
   Future<void> _loadData() async {
     final prefs = await SharedPreferences.getInstance();
+    await prefs.reload(); // 强制重新加载，解决与首页数据不同步问题
     final deviceJson = prefs.getString('overlay_selected_device');
     if (deviceJson != null) {
       setState(() {
@@ -48,8 +50,9 @@ class _OverlayWidgetState extends State<OverlayWidget> {
     _refreshMemoryCount();
   }
 
-  /// 获取本地记忆总数
+  /// 获取本地记忆总数（强制 reload）
   Future<void> _refreshMemoryCount() async {
+    await _memoryService.reload(); // 确保读取最新数据
     final count = await _memoryService.getCount();
     setState(() {
       _memoryCount = count;
@@ -63,9 +66,11 @@ class _OverlayWidgetState extends State<OverlayWidget> {
       _showMemoryList = false;
     });
     if (_isExpanded) {
-      await FlutterOverlayWindow.resizeOverlay(300, 400, true);
+      // 展开时重新加载数据，确保与首页同步
+      await _loadData();
+      await FlutterOverlayWindow.resizeOverlay(240, 320, true);
     } else {
-      await FlutterOverlayWindow.resizeOverlay(70, 70, true);
+      await FlutterOverlayWindow.resizeOverlay(56, 56, true);
     }
   }
 
@@ -158,8 +163,8 @@ class _OverlayWidgetState extends State<OverlayWidget> {
           clipBehavior: Clip.none,
           children: [
             Container(
-              width: 60,
-              height: 60,
+              width: 48,
+              height: 48,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 gradient: const LinearGradient(
@@ -175,23 +180,23 @@ class _OverlayWidgetState extends State<OverlayWidget> {
                   ),
                 ],
               ),
-              child: const Icon(Icons.send, color: Colors.white, size: 28),
+              child: const Icon(Icons.send, color: Colors.white, size: 22),
             ),
             if (_memoryCount > 0)
               Positioned(
-                right: -2,
-                top: -2,
+                right: -4,
+                top: -4,
                 child: Container(
-                  padding: const EdgeInsets.all(4),
+                  padding: const EdgeInsets.all(3),
                   decoration: const BoxDecoration(
                     color: Colors.redAccent,
                     shape: BoxShape.circle,
                   ),
-                  constraints: const BoxConstraints(minWidth: 22, minHeight: 22),
+                  constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
                   child: Center(
                     child: Text(
                       '$_memoryCount',
-                      style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                      style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
                     ),
                   ),
                 ),
@@ -205,8 +210,8 @@ class _OverlayWidgetState extends State<OverlayWidget> {
   /// 展开状态: 交互卡片
   Widget _buildExpandedView() {
     return Container(
-      width: 300,
-      height: 400,
+      width: 240,
+      height: 320,
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(24),
@@ -235,17 +240,17 @@ class _OverlayWidgetState extends State<OverlayWidget> {
   /// 头部栏
   Widget _buildHeader() {
     return Container(
-      padding: const EdgeInsets.fromLTRB(20, 16, 12, 16),
+      padding: const EdgeInsets.fromLTRB(16, 12, 10, 12),
       color: Colors.grey[50],
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(
             _showMemoryList ? "历史记忆" : "快捷发送",
-            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16, color: Colors.black87),
+            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14, color: Colors.black87),
           ),
           IconButton(
-            icon: Icon(_showMemoryList ? Icons.arrow_back_ios_new : Icons.close_rounded, size: 18),
+            icon: Icon(_showMemoryList ? Icons.arrow_back_ios_new : Icons.close_rounded, size: 16),
             onPressed: () {
               if (_showMemoryList) {
                 setState(() => _showMemoryList = false);
@@ -265,58 +270,61 @@ class _OverlayWidgetState extends State<OverlayWidget> {
   /// 发送主界面
   Widget _buildMainInputView() {
     return Padding(
-      padding: const EdgeInsets.all(20.0),
+      padding: const EdgeInsets.all(12.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // 设备标签
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
               color: Colors.blue[50],
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(6),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.laptop, size: 14, color: Color(0xFF4A90E2)),
-                const SizedBox(width: 6),
+                const Icon(Icons.laptop, size: 12, color: Color(0xFF4A90E2)),
+                const SizedBox(width: 4),
                 Flexible(
                   child: Text(
                     _selectedDevice?['name'] ?? '未选择设备',
-                    style: const TextStyle(color: Color(0xFF4A90E2), fontSize: 12, fontWeight: FontWeight.w500),
+                    style: const TextStyle(color: Color(0xFF4A90E2), fontSize: 11, fontWeight: FontWeight.w500),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 10),
+          // 输入框
           Expanded(
             child: TextField(
               controller: _textController,
               maxLines: null,
               expands: true,
-              style: const TextStyle(fontSize: 14, height: 1.5),
+              style: const TextStyle(fontSize: 13, height: 1.4),
               decoration: InputDecoration(
                 hintText: "输入内容...",
-                hintStyle: TextStyle(color: Colors.grey[400]),
+                hintStyle: TextStyle(color: Colors.grey[400], fontSize: 13),
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(12),
                   borderSide: BorderSide.none,
                 ),
                 filled: true,
                 fillColor: Colors.grey[100],
-                contentPadding: const EdgeInsets.all(16),
+                contentPadding: const EdgeInsets.all(12),
               ),
             ),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 10),
+          // 底部操作栏
           Row(
             children: [
               _buildToolBtn("暂存", Icons.save_alt_rounded, _handleStash),
-              const SizedBox(width: 8),
+              const SizedBox(width: 6),
               _buildToolBtn("记忆($_memoryCount)", Icons.history_rounded, _openMemoryList),
-              const SizedBox(width: 12),
+              const SizedBox(width: 8),
               _buildSendBtn(),
             ],
           ),
@@ -328,18 +336,18 @@ class _OverlayWidgetState extends State<OverlayWidget> {
   Widget _buildToolBtn(String label, IconData icon, VoidCallback onTap) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(8),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
         decoration: BoxDecoration(
           border: Border.all(color: Colors.grey[200]!),
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(8),
         ),
         child: Column(
           children: [
-            Icon(icon, size: 20, color: Colors.grey[600]),
+            Icon(icon, size: 16, color: Colors.grey[600]),
             const SizedBox(height: 2),
-            Text(label, style: TextStyle(fontSize: 9, color: Colors.grey[600])),
+            Text(label, style: TextStyle(fontSize: 8, color: Colors.grey[600])),
           ],
         ),
       ),
@@ -354,10 +362,10 @@ class _OverlayWidgetState extends State<OverlayWidget> {
           backgroundColor: const Color(0xFF4A90E2),
           foregroundColor: Colors.white,
           elevation: 0,
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         ),
-        child: const Text("发送", style: TextStyle(fontWeight: FontWeight.bold)),
+        child: const Text("发送", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
       ),
     );
   }
@@ -366,13 +374,13 @@ class _OverlayWidgetState extends State<OverlayWidget> {
   Widget _buildMemoryListView() {
     if (_memories.isEmpty) {
       return Center(
-        child: Text("暂无记忆内容", style: TextStyle(color: Colors.grey[400])),
+        child: Text("暂无记忆内容", style: TextStyle(color: Colors.grey[400], fontSize: 13)),
       );
     }
     return ListView.separated(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(10),
       itemCount: _memories.length,
-      separatorBuilder: (context, index) => const SizedBox(height: 10),
+      separatorBuilder: (context, index) => const SizedBox(height: 8),
       itemBuilder: (context, index) {
         final memory = _memories[index];
         return InkWell(
@@ -380,30 +388,26 @@ class _OverlayWidgetState extends State<OverlayWidget> {
             await _handleSendMemory(memory);
             setState(() => _showMemoryList = false);
           },
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(8),
           child: Container(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
               color: Colors.grey[50],
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(8),
               border: Border.all(color: Colors.grey[100]!),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            child: Row(
               children: [
-                Text(
-                  memory.content,
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 13, color: Colors.black87),
+                Expanded(
+                  child: Text(
+                    memory.content,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 12, color: Colors.black87),
+                  ),
                 ),
-                const SizedBox(height: 8),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    Icon(Icons.send_to_mobile_rounded, size: 14, color: Colors.blue[300]),
-                  ],
-                ),
+                const SizedBox(width: 8),
+                Icon(Icons.send_rounded, size: 16, color: Colors.blue[400]),
               ],
             ),
           ),

@@ -29,8 +29,8 @@ class OverlayService {
     }
 
     await FlutterOverlayWindow.showOverlay(
-      height: 70, // 小球初始高度 (60 + 边距)
-      width: 70,  // 小球初始宽度 (60 + 边距)
+      height: 56, // 小球初始高度
+      width: 56,  // 小球初始宽度
       alignment: OverlayAlignment.centerRight,
       visibility: NotificationVisibility.visibilityPublic,
       flag: OverlayFlag.focusPointer,

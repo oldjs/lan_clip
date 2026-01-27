@@ -38,9 +38,16 @@ class TextMemoryService {
   static const String _storageKey = 'text_memories';
   final _uuid = const Uuid();
 
+  /// 强制重新加载 SharedPreferences（用于跨进程同步）
+  Future<void> reload() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.reload();
+  }
+
   /// 获取所有记忆，按创建时间倒序排列
   Future<List<TextMemory>> getAll() async {
     final prefs = await SharedPreferences.getInstance();
+    await prefs.reload(); // 确保读取最新数据
     final String? memoriesJson = prefs.getString(_storageKey);
     
     if (memoriesJson == null) {

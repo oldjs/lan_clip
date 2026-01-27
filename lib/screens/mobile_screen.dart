@@ -669,16 +669,35 @@ class _MobileScreenState extends State<MobileScreen> {
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               const Text('目标设备', style: TextStyle(fontSize: 16)),
-                              ElevatedButton.icon(
-                                onPressed: _isSearching ? null : _searchDevices,
-                                icon: _isSearching
-                                    ? const SizedBox(
-                                        width: 16,
-                                        height: 16,
-                                        child: CircularProgressIndicator(strokeWidth: 2),
-                                      )
-                                    : const Icon(Icons.search),
-                                label: Text(_isSearching ? '搜索中' : '搜索'),
+                              Row(
+                                children: [
+                                  // 断开连接按钮 - 仅在已连接时显示
+                                  if (_selectedDevice != null)
+                                    Padding(
+                                      padding: const EdgeInsets.only(right: 8),
+                                      child: OutlinedButton(
+                                        onPressed: () {
+                                          setState(() => _selectedDevice = null);
+                                          _showSnackBar('已断开连接');
+                                        },
+                                        style: OutlinedButton.styleFrom(
+                                          foregroundColor: Colors.red,
+                                        ),
+                                        child: const Text('断开'),
+                                      ),
+                                    ),
+                                  ElevatedButton.icon(
+                                    onPressed: _isSearching ? null : _searchDevices,
+                                    icon: _isSearching
+                                        ? const SizedBox(
+                                            width: 16,
+                                            height: 16,
+                                            child: CircularProgressIndicator(strokeWidth: 2),
+                                          )
+                                        : const Icon(Icons.search),
+                                    label: Text(_isSearching ? '搜索中' : '搜索'),
+                                  ),
+                                ],
                               ),
                             ],
                           ),
