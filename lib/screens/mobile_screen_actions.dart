@@ -351,7 +351,6 @@ extension _MobileScreenStateActions on _MobileScreenState {
     await _textMemoryService.add(text);
     _textController.clear();
     await _loadMemoryCount();
-    _showSnackBar('已暂存');
   }
 
   Future<void> _saveDeviceForOverlay(Device? device) async {
@@ -389,8 +388,6 @@ extension _MobileScreenStateActions on _MobileScreenState {
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_autoSendEnabledKey, newValue);
-
-    _showSnackBar(newValue ? '自动发送已开启' : '自动发送已关闭');
   }
 
   void _openSettings() {

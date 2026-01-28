@@ -1,12 +1,14 @@
 import 'dart:io';
 
 import 'package:device_policy_manager/device_policy_manager.dart';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'clipboard_service.dart';
 
 class PhoneControlService {
   static const String allowPcLockKey = 'allow_pc_lock_phone';
+  static const _adminChannel = MethodChannel('com.example.lan_clip/device_admin');
 
   /// 是否允许电脑控制锁屏
   static Future<bool> isPcLockAllowed() async {
@@ -26,12 +28,29 @@ class PhoneControlService {
     return DevicePolicyManager.isPermissionGranted();
   }
 
-  /// 请求设备管理员权限
+  /// 请求设备管理员权限（直接跳转到激活页面）
   static Future<bool> requestAdminPermission() async {
     if (!Platform.isAndroid) return false;
-    return DevicePolicyManager.requestPermession(
-      'LAN Clip 需要设备管理员权限才能锁屏',
-    );
+    try {
+      // 使用自定义方法直接跳转到设备管理员激活页面
+      await _adminChannel.invokeMethod('requestDeviceAdmin');
+      // 等待用户返回后检查权限状态
+      await Future.delayed(const Duration(milliseconds: 500));
+      return await isAdminGranted();
+    } catch (_) {
+      // 降级使用 device_policy_manager 包的方法
+      return DevicePolicyManager.requestPermession(
+        'LAN Clip 需要设备管理员权限才能锁屏',
+      );
+    }
+  }
+
+  /// 打开设备管理员设置页面
+  static Future<void> openDeviceAdminSettings() async {
+    if (!Platform.isAndroid) return;
+    try {
+      await _adminChannel.invokeMethod('openDeviceAdminSettings');
+    } catch (_) {}
   }
 
   /// 执行锁屏

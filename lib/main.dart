@@ -57,6 +57,7 @@ void main(List<String> args) async {
       center: true,
       title: 'LAN Clip',
       skipTaskbar: false,
+      titleBarStyle: TitleBarStyle.hidden,  // 隐藏系统标题栏，使用自定义标题栏
     );
     
     await windowManager.waitUntilReadyToShow(windowOptions, () async {

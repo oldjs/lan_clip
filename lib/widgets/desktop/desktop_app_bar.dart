@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
+import 'package:window_manager/window_manager.dart';
 
 /// 桌面端顶部栏
 class DesktopAppBar extends StatelessWidget implements PreferredSizeWidget {
@@ -8,6 +9,7 @@ class DesktopAppBar extends StatelessWidget implements PreferredSizeWidget {
   final VoidCallback onOpenTransfer;
   final VoidCallback? onLockPhone;
   final VoidCallback? onMinimize;
+  final VoidCallback? onClose;
 
   const DesktopAppBar({
     super.key,
@@ -16,6 +18,7 @@ class DesktopAppBar extends StatelessWidget implements PreferredSizeWidget {
     required this.onOpenTransfer,
     this.onLockPhone,
     this.onMinimize,
+    this.onClose,
   });
 
   @override
@@ -25,54 +28,65 @@ class DesktopAppBar extends StatelessWidget implements PreferredSizeWidget {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
 
-    return AppBar(
-      titleSpacing: 20,
-      title: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'LAN Clip',
-            style: Theme.of(context).textTheme.titleLarge,
-          ),
-          Text(
-            '桌面接收端',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: colorScheme.onSurfaceVariant,
+    return GestureDetector(
+      onPanStart: (_) => windowManager.startDragging(),
+      child: AppBar(
+        titleSpacing: 20,
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'LAN Clip',
+              style: Theme.of(context).textTheme.titleLarge,
             ),
+            Text(
+              '桌面接收端',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          _AppBarIconButton(
+            tooltip: '设置',
+            icon: PhosphorIconsRegular.gearSix,
+            onPressed: onOpenSettings,
           ),
+          const SizedBox(width: 4),
+          if (onLockPhone != null) ...[
+            _AppBarIconButton(
+              tooltip: '手机锁屏',
+              icon: PhosphorIconsRegular.lockSimple,
+              onPressed: onLockPhone!,
+            ),
+            const SizedBox(width: 4),
+          ],
+          _AppBarIconButton(
+            tooltip: '文件传输',
+            icon: PhosphorIconsRegular.folderOpen,
+            onPressed: onOpenTransfer,
+            badgeCount: activeTransferCount,
+          ),
+          if (onMinimize != null) ...[
+            const SizedBox(width: 4),
+            _AppBarIconButton(
+              tooltip: '最小化到托盘',
+              icon: PhosphorIconsRegular.minus,
+              onPressed: onMinimize!,
+            ),
+          ],
+          if (onClose != null) ...[
+            const SizedBox(width: 4),
+            _AppBarIconButton(
+              tooltip: '退出程序',
+              icon: PhosphorIconsRegular.x,
+              onPressed: onClose!,
+            ),
+          ],
+          const SizedBox(width: 12),
         ],
       ),
-      actions: [
-        _AppBarIconButton(
-          tooltip: '设置',
-          icon: PhosphorIconsRegular.gearSix,
-          onPressed: onOpenSettings,
-        ),
-        const SizedBox(width: 4),
-        if (onLockPhone != null) ...[
-          _AppBarIconButton(
-            tooltip: '手机锁屏',
-            icon: PhosphorIconsRegular.lockSimple,
-            onPressed: onLockPhone!,
-          ),
-          const SizedBox(width: 4),
-        ],
-        _AppBarIconButton(
-          tooltip: '文件传输',
-          icon: PhosphorIconsRegular.folderOpen,
-          onPressed: onOpenTransfer,
-          badgeCount: activeTransferCount,
-        ),
-        if (onMinimize != null) ...[
-          const SizedBox(width: 4),
-          _AppBarIconButton(
-            tooltip: '最小化到托盘',
-            icon: PhosphorIconsRegular.minus,
-            onPressed: onMinimize!,
-          ),
-        ],
-        const SizedBox(width: 12),
-      ],
     );
   }
 }

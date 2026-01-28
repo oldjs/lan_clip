@@ -10,3 +10,7 @@
 - Android 锁屏需设备管理员接收器与策略 XML（`AndroidManifest.xml` + `res/xml/device_admin_receiver.xml`），并在手机设置默认关闭后手动授权。
 - `device_policy_manager` 的权限申请方法名为 `requestPermession`（拼写不是 requestPermission），调用时要按包的真实 API 名称。
 - 触摸板按钮走 `CMD:MOUSE_*` 指令通道，长按发送 `*_DOWN/UP`，中键单击用 `CMD:MOUSE_MIDDLE_CLICK`。
+- `FileTransferScreen`、`AppGridScreen` 等需要设备连接的屏幕，必须通过导航参数传入 `selectedDevice`，否则显示"未连接"且功能不可用。
+- 当目标设备需要密码（`device.requiresPassword`）时，客户端屏幕应始终派生加密密钥，不论本地加密设置如何，以匹配 PC 端的加密状态。
+- Windows 隐藏系统标题栏：`WindowOptions` 设置 `titleBarStyle: TitleBarStyle.hidden`，自定义 AppBar 用 `GestureDetector(onPanStart: (_) => windowManager.startDragging())` 支持拖拽。
+- 快速退出程序用 `exit(0)`（dart:io），`windowManager.destroy()` 有动画延迟会很慢。

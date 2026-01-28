@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -452,7 +453,9 @@ class _DesktopScreenState extends State<DesktopScreen>
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (context) => const FileTransferScreen(),
+                        builder: (context) => FileTransferScreen(
+                          selectedDevice: _connectedDevices.isNotEmpty ? _connectedDevices.first : null,
+                        ),
                       ),
                     );
                   },
@@ -565,9 +568,25 @@ class _DesktopScreenState extends State<DesktopScreen>
         windowManager.focus();
         break;
       case 'exit':
-        windowManager.destroy();
+        _exitApp();
         break;
     }
+  }
+
+  /// 快速退出应用
+  void _exitApp() {
+    // 清理资源
+    _keepAliveTimer?.cancel();
+    _messageSubscription?.cancel();
+    _connectedDeviceSubscription?.cancel();
+    _clipboardSubscription?.cancel();
+    _transferSubscription?.cancel();
+    _transferRequestSubscription?.cancel();
+    _discoveryService.dispose();
+    _socketService.dispose();
+    _clipboardWatcher.dispose();
+    // 直接退出，不等待窗口动画
+    exit(0);
   }
 
   // ========== 窗口事件 ==========
@@ -587,15 +606,25 @@ class _DesktopScreenState extends State<DesktopScreen>
         onLockPhone: _connectedDevices.any((d) => d.syncPort != null)
             ? _sendPhoneLockCommand
             : null,
-        onOpenTransfer: () {
+        onOpenTransfer: () async {
+          Device? targetDevice;
+          if (_connectedDevices.length == 1) {
+            targetDevice = _connectedDevices.first;
+          } else if (_connectedDevices.length > 1) {
+            targetDevice = await _pickDeviceForMobileControl();
+          }
+          if (!mounted) return;
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) => const FileTransferScreen(),
+              builder: (context) => FileTransferScreen(
+                selectedDevice: targetDevice,
+              ),
             ),
           );
         },
         onMinimize: Platform.isWindows ? () => windowManager.hide() : null,
+        onClose: Platform.isWindows ? () => _exitApp() : null,
       ),
       body: Stack(
         children: [
@@ -621,7 +650,6 @@ class _DesktopScreenState extends State<DesktopScreen>
                       onToggle: (value) => setState(() => _showHistory = value),
                       onCopy: (message) async {
                         await ClipboardService.copy(message.content);
-                        _showSnackBar('已复制');
                       },
                       onOpen: _showMessageDetail,
                     ),
@@ -699,7 +727,6 @@ class _DesktopScreenState extends State<DesktopScreen>
     if (device == null) return;
 
     await _socketService.pushCommandToDevices([device], cmdPhoneLock);
-    _showSnackBar('已发送锁屏指令');
   }
 
   Future<Device?> _pickDeviceForMobileControl() async {

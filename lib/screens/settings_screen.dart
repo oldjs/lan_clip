@@ -201,7 +201,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final transferService = FileTransferService();
       await transferService.clearCache();
       await _loadFileTransferSettings();
-      _showSnackBar('缓存已清理');
     }
   }
 
@@ -458,7 +457,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final password = await _showSetPasswordDialog();
     if (password != null && password.isNotEmpty) {
       await AuthService.setPassword(password);
-      _showSnackBar('密码已更新');
     }
   }
 
@@ -739,9 +737,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (!granted) {
         final shouldRequest = await _showPhoneLockPermissionDialog();
         if (shouldRequest != true) return;
-        final result = await PhoneControlService.requestAdminPermission();
-        if (!result) {
-          _showSnackBar('请在系统设置中授予设备管理员权限');
+        
+        // 直接跳转到设备管理员激活页面
+        await PhoneControlService.requestAdminPermission();
+        
+        // 等待用户返回并重新检查权限
+        await Future.delayed(const Duration(milliseconds: 800));
+        final nowGranted = await PhoneControlService.isAdminGranted();
+        
+        if (!nowGranted) {
+          // 权限仍未授予，显示更友好的提示
+          if (!mounted) return;
+          _showSnackBar('权限未授予，请重试或在「安全」设置中手动开启');
           return;
         }
       }
@@ -765,10 +772,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
           children: [
             Text('开启电脑锁屏控制需要设备管理员权限：'),
             SizedBox(height: 12),
-            Text('- 允许应用锁定屏幕', style: TextStyle(fontSize: 14)),
+            Text('• 允许应用锁定屏幕', style: TextStyle(fontSize: 14)),
+            SizedBox(height: 12),
+            Text(
+              '点击「去授权」后会跳转到系统页面，请点击「激活」按钮完成授权。',
+              style: TextStyle(fontSize: 13),
+            ),
             SizedBox(height: 8),
             Text(
-              '该权限仅用于执行锁屏操作，未开启不会响应电脑指令。',
+              '该权限仅用于执行锁屏操作，不会影响其他功能。',
               style: TextStyle(color: Colors.grey, fontSize: 12),
             ),
           ],
@@ -778,9 +790,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             onPressed: () => Navigator.pop(context, false),
             child: const Text('取消'),
           ),
-          TextButton(
+          FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('去设置'),
+            child: const Text('去授权'),
           ),
         ],
       ),

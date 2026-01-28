@@ -48,9 +48,16 @@ class _AppGridScreenState extends State<AppGridScreen> {
   Future<void> _initialize() async {
     // 初始化加密设置
     _encryptionEnabled = await EncryptionService.isEncryptionEnabled();
-    if (_encryptionEnabled && _passwordHash != null) {
+    
+    // 当设备需要密码且已有密码哈希时，始终派生密钥
+    // PC端可能启用了加密，需要确保能解密响应
+    if (widget.device.requiresPassword && _passwordHash != null) {
+      _encryptionKey = await EncryptionService.deriveKey(_passwordHash!);
+      _encryptionEnabled = true; // 匹配PC端的加密设置
+    } else if (_encryptionEnabled && _passwordHash != null) {
       _encryptionKey = await EncryptionService.deriveKey(_passwordHash!);
     }
+    
     _socketService.setEncryption(enabled: _encryptionEnabled, key: _encryptionKey);
 
     await _loadApps();

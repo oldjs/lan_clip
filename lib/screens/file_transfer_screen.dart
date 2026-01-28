@@ -76,8 +76,19 @@ class _FileTransferScreenState extends State<FileTransferScreen>
   Future<void> _loadLocalInfo() async {
     final downloadPath = await _transferService.getDownloadPath();
     final autoAccept = await _transferService.isAutoAcceptEnabled();
-    final encryptionEnabled = await EncryptionService.isEncryptionEnabled();
+    var encryptionEnabled = await EncryptionService.isEncryptionEnabled();
     final passwordEnabled = await AuthService.isPasswordEnabled();
+
+    // 当设备需要密码时，确保加密密钥正确初始化
+    // 与 app_grid_screen 保持一致的逻辑
+    if (widget.selectedDevice?.requiresPassword == true && widget.passwordHash != null) {
+      final key = await EncryptionService.deriveKey(widget.passwordHash!);
+      encryptionEnabled = true;
+      _transferService.setEncryption(enabled: true, key: key);
+    } else if (encryptionEnabled && widget.passwordHash != null) {
+      final key = await EncryptionService.deriveKey(widget.passwordHash!);
+      _transferService.setEncryption(enabled: true, key: key);
+    }
 
     if (mounted) {
       setState(() {
@@ -127,7 +138,7 @@ class _FileTransferScreenState extends State<FileTransferScreen>
           device: widget.selectedDevice!,
           passwordHash: widget.passwordHash,
         );
-        _showSnackBar('开始传输 ${paths.length} 个文件');
+
       }
     }
   }
@@ -364,7 +375,6 @@ class _FileTransferScreenState extends State<FileTransferScreen>
               tooltip: '清空已完成',
               onPressed: () {
                 _transferService.clearCompletedTasks();
-                _showSnackBar('已清空');
               },
             ),
         ],
