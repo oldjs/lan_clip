@@ -51,15 +51,29 @@ extension _MobileScreenStateActions on _MobileScreenState {
   Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
     final receiveFromPc = prefs.getBool(_receiveFromPcKey) ?? false;
+    final passwordEnabled = await AuthService.isPasswordEnabled();
     final encryptionEnabled = await EncryptionService.isEncryptionEnabled();
+    var effectiveEncryptionEnabled = encryptionEnabled;
+    var resetEncryption = false;
+
+    // 未启用密码时强制关闭加密，避免解密失败
+    if (encryptionEnabled && !passwordEnabled) {
+      await EncryptionService.setEncryptionEnabled(false);
+      effectiveEncryptionEnabled = false;
+      resetEncryption = true;
+    }
 
     setState(() {
       _autoSendEnabled = prefs.getBool(_autoSendEnabledKey) ?? false;
       _autoSendDelay = prefs.getDouble(_autoSendDelayKey) ?? 3.0;
       _receiveFromPc = receiveFromPc;
-      _encryptionEnabled = encryptionEnabled;
+      _encryptionEnabled = effectiveEncryptionEnabled;
     });
     _fileTransferService.setEncryption(enabled: _encryptionEnabled, key: _encryptionKey);
+
+    if (resetEncryption && mounted) {
+      _showSnackBar('未设置密码，已关闭加密');
+    }
 
     if (receiveFromPc) {
       await _startSyncService();

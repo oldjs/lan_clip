@@ -49,13 +49,19 @@ class DesktopHistoryPanel extends StatelessWidget {
               children: [
                 if (messages.isNotEmpty)
                   TextButton.icon(
-                    onPressed: onClear,
+                    onPressed: () => _confirmClear(context),
                     icon: PhosphorIcon(
                       PhosphorIconsRegular.trashSimple,
                       size: 16,
                     ),
                     label: const Text('清空'),
                   ),
+                Text(
+                  showHistory ? '显示' : '隐藏',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                ),
                 Switch(
                   value: showHistory,
                   onChanged: onToggle,
@@ -66,8 +72,7 @@ class DesktopHistoryPanel extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         if (showHistory)
-          SizedBox(
-            height: 420,
+          Expanded(
             child: Card(
               child: messages.isEmpty
                   ? Center(
@@ -109,6 +114,29 @@ class DesktopHistoryPanel extends StatelessWidget {
           ),
       ],
     );
+  }
+
+  Future<void> _confirmClear(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('清空历史'),
+        content: const Text('确定要清空所有接收历史吗？此操作不可撤销。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('清空'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      onClear();
+    }
   }
 
   String _formatTime(DateTime time) {

@@ -92,19 +92,34 @@ class _DesktopScreenState extends State<DesktopScreen>
     final prefs = await SharedPreferences.getInstance();
     final passwordEnabled = await AuthService.isPasswordEnabled();
     final encryptionEnabled = await EncryptionService.isEncryptionEnabled();
+    var effectiveEncryptionEnabled = encryptionEnabled;
+    var resetEncryption = false;
+
+    // 未启用密码时强制关闭加密，避免解密失败
+    if (encryptionEnabled && !passwordEnabled) {
+      await EncryptionService.setEncryptionEnabled(false);
+      effectiveEncryptionEnabled = false;
+      resetEncryption = true;
+    }
     
     setState(() {
       _autoPaste = prefs.getBool(_autoPasteKey) ?? false;
       _syncToMobile = prefs.getBool(_syncToMobileKey) ?? false;
       _passwordEnabled = passwordEnabled;
-      _encryptionEnabled = encryptionEnabled;
+      _encryptionEnabled = effectiveEncryptionEnabled;
     });
 
-    if (encryptionEnabled && passwordEnabled) {
+    if (resetEncryption && mounted) {
+      _showSnackBar('未设置密码，已关闭加密');
+    }
+
+    if (effectiveEncryptionEnabled && passwordEnabled) {
       final hash = await AuthService.getPasswordHash();
       if (hash != null) {
         _encryptionKey = await EncryptionService.deriveKey(hash);
       }
+    } else {
+      _encryptionKey = null;
     }
   }
 
@@ -502,6 +517,13 @@ class _DesktopScreenState extends State<DesktopScreen>
               _updatePasswordSettings();
             },
             onEncryptionChanged: (value) async {
+              if (value && !_passwordEnabled) {
+                _showSnackBar('请先启用密码保护');
+                setState(() => _encryptionEnabled = false);
+                _socketService.setEncryption(enabled: false, key: null);
+                _fileTransferService.setEncryption(enabled: false, key: null);
+                return;
+              }
               setState(() => _encryptionEnabled = value);
               if (value && _passwordEnabled) {
                 final hash = await AuthService.getPasswordHash();
@@ -512,6 +534,7 @@ class _DesktopScreenState extends State<DesktopScreen>
                 _encryptionKey = null;
               }
               _socketService.setEncryption(enabled: value, key: _encryptionKey);
+              _fileTransferService.setEncryption(enabled: value, key: _encryptionKey);
             },
           ),
         ),
@@ -578,7 +601,7 @@ class _DesktopScreenState extends State<DesktopScreen>
         children: [
           const DesktopBackground(),
           SafeArea(
-            child: SingleChildScrollView(
+            child: Padding(
               padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -587,17 +610,21 @@ class _DesktopScreenState extends State<DesktopScreen>
                     isRunning: _isRunning,
                     localIp: _localIp,
                     tcpPort: _tcpPort,
+                    connectedDeviceCount: _connectedDevices.length,
                   ),
                   const SizedBox(height: 20),
-                  DesktopHistoryPanel(
-                    showHistory: _showHistory,
-                    messages: _messages,
-                    onClear: () => setState(() => _messages.clear()),
-                    onToggle: (value) => setState(() => _showHistory = value),
-                    onCopy: (message) async {
-                      await ClipboardService.copy(message.content);
-                    },
-                    onOpen: _showMessageDetail,
+                  Expanded(
+                    child: DesktopHistoryPanel(
+                      showHistory: _showHistory,
+                      messages: _messages,
+                      onClear: () => setState(() => _messages.clear()),
+                      onToggle: (value) => setState(() => _showHistory = value),
+                      onCopy: (message) async {
+                        await ClipboardService.copy(message.content);
+                        _showSnackBar('已复制');
+                      },
+                      onOpen: _showMessageDetail,
+                    ),
                   ),
                 ],
               ),
@@ -612,18 +639,45 @@ class _DesktopScreenState extends State<DesktopScreen>
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('接收时间: ${_formatTime(msg.time)}'),
-        content: SelectableText(msg.content),
+        title: Row(
+          children: [
+            const Icon(Icons.message_outlined, size: 20),
+            const SizedBox(width: 8),
+            const Text('消息详情'),
+            const Spacer(),
+            Text(
+              _formatTime(msg.time),
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 400, maxHeight: 300),
+          child: SingleChildScrollView(
+            child: SelectableText(
+              msg.content,
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+          ),
+        ),
         actions: [
           TextButton(
             onPressed: () async {
               final navigator = Navigator.of(context);
               await ClipboardService.copy(msg.content);
               if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('已复制'),
+                    duration: Duration(seconds: 1),
+                  ),
+                );
                 navigator.pop();
               }
             },
-            child: const Text('复制'),
+            child: const Text('复制并关闭'),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context),

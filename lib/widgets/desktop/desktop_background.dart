@@ -52,19 +52,21 @@ class _GlowBlob extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return IgnorePointer(
-      child: Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.35),
-          borderRadius: BorderRadius.circular(size),
-          boxShadow: [
-            BoxShadow(
-              color: color.withValues(alpha: 0.45),
-              blurRadius: 120,
-              spreadRadius: 20,
-            ),
-          ],
+      child: RepaintBoundary(
+        child: Container(
+          width: size,
+          height: size,
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.32),
+            borderRadius: BorderRadius.circular(size),
+            boxShadow: [
+              BoxShadow(
+                color: color.withValues(alpha: 0.4),
+                blurRadius: 90,
+                spreadRadius: 14,
+              ),
+            ],
+          ),
         ),
       ),
     );

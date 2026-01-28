@@ -57,6 +57,11 @@ class FileTransferService {
 
   /// 设置加密
   void setEncryption({required bool enabled, crypto.SecretKey? key}) {
+    if (enabled && key == null) {
+      _encryptionEnabled = false;
+      _encryptionKey = null;
+      return;
+    }
     _encryptionEnabled = enabled;
     _encryptionKey = key;
   }

@@ -74,14 +74,19 @@ class DesktopTheme {
       ),
     );
 
+    final coloredTextTheme = textTheme.apply(
+      bodyColor: colorScheme.onSurface,
+      displayColor: colorScheme.onSurface,
+    );
+
     return base.copyWith(
-      textTheme: textTheme,
+      textTheme: coloredTextTheme,
       appBarTheme: AppBarTheme(
         backgroundColor: Colors.transparent,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
         foregroundColor: colorScheme.onSurface,
-        titleTextStyle: textTheme.titleLarge?.copyWith(
+        titleTextStyle: coloredTextTheme.titleLarge?.copyWith(
           color: colorScheme.onSurface,
         ),
       ),
@@ -135,7 +140,7 @@ class DesktopTheme {
       ),
       snackBarTheme: SnackBarThemeData(
         backgroundColor: colorScheme.inverseSurface,
-        contentTextStyle: textTheme.bodyMedium?.copyWith(
+        contentTextStyle: coloredTextTheme.bodyMedium?.copyWith(
           color: colorScheme.onInverseSurface,
         ),
         behavior: SnackBarBehavior.floating,
@@ -150,14 +155,14 @@ class DesktopTheme {
         indicatorColor: colorScheme.primary,
         labelColor: colorScheme.primary,
         unselectedLabelColor: colorScheme.onSurfaceVariant,
-        labelStyle: textTheme.labelLarge,
+        labelStyle: coloredTextTheme.labelLarge,
       ),
       tooltipTheme: TooltipThemeData(
         decoration: BoxDecoration(
           color: colorScheme.inverseSurface,
           borderRadius: BorderRadius.circular(8),
         ),
-        textStyle: textTheme.bodySmall?.copyWith(
+        textStyle: coloredTextTheme.bodySmall?.copyWith(
           color: colorScheme.onInverseSurface,
         ),
       ),

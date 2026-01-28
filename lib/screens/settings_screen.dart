@@ -98,6 +98,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final prefs = await SharedPreferences.getInstance();
     final passwordEnabled = await AuthService.isPasswordEnabled();
     final encryptionEnabled = await EncryptionService.isEncryptionEnabled();
+    var effectiveEncryptionEnabled = encryptionEnabled;
+    var resetEncryption = false;
+
+    // 未启用密码时强制关闭加密，避免解密失败
+    if (encryptionEnabled && !passwordEnabled) {
+      await EncryptionService.setEncryptionEnabled(false);
+      effectiveEncryptionEnabled = false;
+      resetEncryption = true;
+    }
 
     bool startupEnabled = false;
     if (Platform.isWindows) {
@@ -119,7 +128,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
       // 安全
       _passwordEnabled = passwordEnabled;
-      _encryptionEnabled = encryptionEnabled;
+      _encryptionEnabled = effectiveEncryptionEnabled;
 
       // 启动
       _launchAtStartup = startupEnabled;
@@ -128,6 +137,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _isLoading = false;
     });
     
+    if (resetEncryption && mounted) {
+      _showSnackBar('未设置密码，已关闭加密');
+    }
+
     // 加载悬浮窗状态 (Android)
     if (Platform.isAndroid) {
       final overlayActive = await OverlayService.isActive();
@@ -273,12 +286,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
       }
     } else {
       await AuthService.clearPassword();
-      setState(() => _passwordEnabled = false);
+      final hadEncryption = _encryptionEnabled;
+      if (hadEncryption) {
+        await EncryptionService.setEncryptionEnabled(false);
+      }
+      setState(() {
+        _passwordEnabled = false;
+        _encryptionEnabled = false;
+      });
       widget.callbacks?.onPasswordChanged?.call(false);
+      if (hadEncryption) {
+        widget.callbacks?.onEncryptionChanged?.call(false);
+      }
     }
   }
 
   Future<void> _setEncryptionEnabled(bool value) async {
+    if (value && !_passwordEnabled) {
+      _showSnackBar('请先启用密码保护');
+      await EncryptionService.setEncryptionEnabled(false);
+      setState(() => _encryptionEnabled = false);
+      widget.callbacks?.onEncryptionChanged?.call(false);
+      return;
+    }
     await EncryptionService.setEncryptionEnabled(value);
     setState(() => _encryptionEnabled = value);
     widget.callbacks?.onEncryptionChanged?.call(value);

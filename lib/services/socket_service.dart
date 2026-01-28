@@ -46,6 +46,11 @@ class SocketService {
     required bool enabled,
     SecretKey? key,
   }) {
+    if (enabled && key == null) {
+      _encryptionEnabled = false;
+      _encryptionKey = null;
+      return;
+    }
     _encryptionEnabled = enabled;
     _encryptionKey = key;
   }
