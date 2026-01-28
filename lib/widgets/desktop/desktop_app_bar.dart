@@ -6,6 +6,7 @@ class DesktopAppBar extends StatelessWidget implements PreferredSizeWidget {
   final int activeTransferCount;
   final VoidCallback onOpenSettings;
   final VoidCallback onOpenTransfer;
+  final VoidCallback? onLockPhone;
   final VoidCallback? onMinimize;
 
   const DesktopAppBar({
@@ -13,6 +14,7 @@ class DesktopAppBar extends StatelessWidget implements PreferredSizeWidget {
     required this.activeTransferCount,
     required this.onOpenSettings,
     required this.onOpenTransfer,
+    this.onLockPhone,
     this.onMinimize,
   });
 
@@ -47,6 +49,14 @@ class DesktopAppBar extends StatelessWidget implements PreferredSizeWidget {
           onPressed: onOpenSettings,
         ),
         const SizedBox(width: 4),
+        if (onLockPhone != null) ...[
+          _AppBarIconButton(
+            tooltip: '手机锁屏',
+            icon: PhosphorIconsRegular.lockSimple,
+            onPressed: onLockPhone!,
+          ),
+          const SizedBox(width: 4),
+        ],
         _AppBarIconButton(
           tooltip: '文件传输',
           icon: PhosphorIconsRegular.folderOpen,

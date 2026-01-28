@@ -9,6 +9,7 @@ import '../services/auth_service.dart';
 import '../services/encryption_service.dart';
 import '../services/overlay_service.dart';
 import '../services/file_transfer_service.dart';
+import '../services/phone_control_service.dart';
 import '../main.dart' show startHiddenKey;
 import '../widgets/settings/settings_tiles.dart';
 
@@ -76,6 +77,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   
   // 悬浮窗设置 (仅 Android)
   bool _overlayEnabled = false;
+
+  // 手机控制设置
+  bool _allowPcLock = false;
   
   // 文件传输设置
   String _downloadPath = '';
@@ -127,7 +131,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     // 加载悬浮窗状态 (Android)
     if (Platform.isAndroid) {
       final overlayActive = await OverlayService.isActive();
-      setState(() => _overlayEnabled = overlayActive);
+      final allowPcLock = await PhoneControlService.isPcLockAllowed();
+      setState(() {
+        _overlayEnabled = overlayActive;
+        _allowPcLock = allowPcLock;
+      });
     }
     
     // 加载文件传输设置
@@ -576,6 +584,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
                 const SizedBox(height: 16),
 
+                // 手机控制设置组（仅 Android）
+                if (!isDesktop && Platform.isAndroid) ...[
+                  const SettingsSectionHeader(title: '手机控制'),
+                  Card(
+                    child: SettingsSwitchTile(
+                      title: '允许电脑锁屏',
+                      subtitle: _allowPcLock ? '已允许电脑锁屏/息屏' : '默认关闭，需手动开启',
+                      icon: PhosphorIconsRegular.lockSimple,
+                      value: _allowPcLock,
+                      onChanged: _setPcLockEnabled,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+
                 // 文件传输设置组
                 const SettingsSectionHeader(title: '文件传输'),
                 Card(
@@ -670,6 +693,67 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ],
               ],
             ),
+    );
+  }
+
+  /// 设置电脑锁屏控制开关
+  Future<void> _setPcLockEnabled(bool value) async {
+    if (!Platform.isAndroid) {
+      _showSnackBar('仅支持 Android');
+      return;
+    }
+
+    if (value) {
+      // 申请设备管理员权限
+      final granted = await PhoneControlService.isAdminGranted();
+      if (!granted) {
+        final shouldRequest = await _showPhoneLockPermissionDialog();
+        if (shouldRequest != true) return;
+        final result = await PhoneControlService.requestAdminPermission();
+        if (!result) {
+          _showSnackBar('请在系统设置中授予设备管理员权限');
+          return;
+        }
+      }
+      await PhoneControlService.setPcLockAllowed(true);
+      setState(() => _allowPcLock = true);
+    } else {
+      await PhoneControlService.setPcLockAllowed(false);
+      setState(() => _allowPcLock = false);
+    }
+  }
+
+  /// 显示锁屏权限说明对话框
+  Future<bool?> _showPhoneLockPermissionDialog() {
+    return showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('设备管理员权限'),
+        content: const Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('开启电脑锁屏控制需要设备管理员权限：'),
+            SizedBox(height: 12),
+            Text('- 允许应用锁定屏幕', style: TextStyle(fontSize: 14)),
+            SizedBox(height: 8),
+            Text(
+              '该权限仅用于执行锁屏操作，未开启不会响应电脑指令。',
+              style: TextStyle(color: Colors.grey, fontSize: 12),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('去设置'),
+          ),
+        ],
+      ),
     );
   }
 }

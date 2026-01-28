@@ -8,12 +8,17 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/device.dart';
 import '../models/clipboard_data.dart';
 import '../models/received_message.dart';
+import '../models/app_entry.dart';
+import '../models/remote_request.dart';
 import '../services/discovery_service.dart';
 import '../services/socket_service.dart';
 import '../services/clipboard_service.dart';
 import '../services/clipboard_watcher_service.dart';
 import '../services/auth_service.dart';
 import '../services/encryption_service.dart';
+import '../services/desktop_app_service.dart';
+import '../services/windows_process_service.dart';
+import '../services/windows_window_service.dart';
 import 'package:cryptography/cryptography.dart';
 
 import 'settings_screen.dart';
@@ -39,6 +44,8 @@ class _DesktopScreenState extends State<DesktopScreen>
   final _socketService = SocketService();
   final _clipboardWatcher = ClipboardWatcherService();
   final _fileTransferService = FileTransferService();
+  final _desktopAppService = DesktopAppService();
+  final _processService = WindowsProcessService();
   
   int _activeTransferCount = 0;
   StreamSubscription<List<FileTransferTask>>? _transferSubscription;
@@ -160,6 +167,9 @@ class _DesktopScreenState extends State<DesktopScreen>
         enabled: _encryptionEnabled,
         key: _encryptionKey,
       );
+
+      // 设置请求处理器
+      _socketService.setRequestHandler(handler: _handleRequest);
       
       // 启动 TCP 服务器
       _tcpPort = await _socketService.startServer();
@@ -303,6 +313,79 @@ class _DesktopScreenState extends State<DesktopScreen>
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message), duration: const Duration(seconds: 2)),
     );
+  }
+
+  /// 处理手机端请求
+  Future<RemoteResponse?> _handleRequest(RemoteRequest request) async {
+    switch (request.action) {
+      case 'app_list':
+        final apps = await _desktopAppService.loadApps();
+        return RemoteResponse.ok(
+          request.id,
+          data: apps.map((e) => e.toJson()).toList(),
+        );
+      case 'app_upsert':
+        final app = _parseAppEntry(request.payload);
+        if (app == null) {
+          return RemoteResponse.fail(request.id, '应用参数无效');
+        }
+        final apps = await _desktopAppService.upsert(app);
+        return RemoteResponse.ok(
+          request.id,
+          data: apps.map((e) => e.toJson()).toList(),
+        );
+      case 'app_remove':
+        final id = request.payload?['id'];
+        if (id is! String || id.isEmpty) {
+          return RemoteResponse.fail(request.id, '应用 ID 无效');
+        }
+        final apps = await _desktopAppService.remove(id);
+        return RemoteResponse.ok(
+          request.id,
+          data: apps.map((e) => e.toJson()).toList(),
+        );
+      case 'app_launch':
+        final id = request.payload?['id'];
+        if (id is! String || id.isEmpty) {
+          return RemoteResponse.fail(request.id, '应用 ID 无效');
+        }
+        final ok = await _desktopAppService.launchById(id);
+        if (!ok) {
+          return RemoteResponse.fail(request.id, '启动失败');
+        }
+        return RemoteResponse.ok(request.id, data: {'launched': true});
+      case 'process_list':
+        final list = await _processService.listProcesses();
+        return RemoteResponse.ok(
+          request.id,
+          data: list.map((e) => e.toJson()).toList(),
+        );
+      case 'process_activate':
+        final pid = _parsePid(request.payload?['pid']);
+        if (pid == null) {
+          return RemoteResponse.fail(request.id, 'PID 无效');
+        }
+        final ok = await WindowsWindowService.activateProcess(pid);
+        if (!ok) {
+          return RemoteResponse.fail(request.id, '激活失败');
+        }
+        return RemoteResponse.ok(request.id, data: {'activated': true});
+      default:
+        return RemoteResponse.fail(request.id, '未知指令');
+    }
+  }
+
+  AppEntry? _parseAppEntry(Map<String, dynamic>? payload) {
+    if (payload == null) return null;
+    final appJson = payload['app'];
+    if (appJson is! Map<String, dynamic>) return null;
+    return AppEntry.tryFromJson(appJson);
+  }
+
+  int? _parsePid(dynamic value) {
+    if (value is int) return value;
+    if (value is String) return int.tryParse(value);
+    return null;
   }
 
   /// 显示接收确认对话框
@@ -478,6 +561,9 @@ class _DesktopScreenState extends State<DesktopScreen>
       appBar: DesktopAppBar(
         activeTransferCount: _activeTransferCount,
         onOpenSettings: _openSettings,
+        onLockPhone: _connectedDevices.any((d) => d.syncPort != null)
+            ? _sendPhoneLockCommand
+            : null,
         onOpenTransfer: () {
           Navigator.push(
             context,
@@ -552,5 +638,40 @@ class _DesktopScreenState extends State<DesktopScreen>
     return '${time.hour.toString().padLeft(2, '0')}:'
         '${time.minute.toString().padLeft(2, '0')}:'
         '${time.second.toString().padLeft(2, '0')}';
+  }
+
+  Future<void> _sendPhoneLockCommand() async {
+    final device = await _pickDeviceForMobileControl();
+    if (device == null) return;
+
+    await _socketService.pushCommandToDevices([device], cmdPhoneLock);
+    _showSnackBar('已发送锁屏指令');
+  }
+
+  Future<Device?> _pickDeviceForMobileControl() async {
+    final devices = _connectedDevices.where((d) => d.syncPort != null).toList();
+    if (devices.isEmpty) {
+      _showSnackBar('未发现可控制的手机');
+      return null;
+    }
+    if (devices.length == 1) return devices.first;
+
+    return showModalBottomSheet<Device>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: ListView.separated(
+          itemCount: devices.length,
+          separatorBuilder: (_, __) => const Divider(height: 1),
+          itemBuilder: (context, index) {
+            final device = devices[index];
+            return ListTile(
+              title: Text(device.name),
+              subtitle: Text('${device.ip}:${device.syncPort}'),
+              onTap: () => Navigator.pop(context, device),
+            );
+          },
+        ),
+      ),
+    );
   }
 }

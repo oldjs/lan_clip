@@ -56,6 +56,9 @@ const String cmdShutdown = '${cmdPrefix}SHUTDOWN';           // CMD:SHUTDOWN:秒
 const String cmdShutdownCancel = '${cmdPrefix}SHUTDOWN_CANCEL';  // 取消关机
 const String cmdShutdownNow = '${cmdPrefix}SHUTDOWN_NOW';        // 立即关机
 
+// 手机控制指令
+const String cmdPhoneLock = '${cmdPrefix}PHONE_LOCK';            // 锁屏/息屏
+
 /// 重试配置
 const int _maxRetries = 3;           // 最大重试次数
 const int _retryDelayMs = 30;        // 重试间隔(毫秒)

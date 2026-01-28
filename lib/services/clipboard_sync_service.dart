@@ -2,7 +2,9 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:convert';
 import '../models/clipboard_data.dart';
+import '../services/clipboard_service.dart';
 import '../services/encryption_service.dart';
+import '../services/phone_control_service.dart';
 import 'package:cryptography/cryptography.dart';
 
 /// 手机端剪贴板同步接收服务
@@ -81,6 +83,12 @@ class ClipboardSyncService {
               client.close();
               return;
             }
+          }
+
+          if (ClipboardService.isCommand(message)) {
+            await PhoneControlService.handleCommand(message);
+            client.close();
+            return;
           }
 
           final content = ClipboardContent.deserialize(message);

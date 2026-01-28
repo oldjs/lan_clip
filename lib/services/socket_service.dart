@@ -3,7 +3,9 @@ import 'dart:io';
 import 'dart:convert';
 import '../models/device.dart';
 import '../models/clipboard_data.dart';
+import '../models/remote_request.dart';
 import '../services/encryption_service.dart';
+import 'remote_request_codec.dart';
 import 'package:cryptography/cryptography.dart';
 
 /// 认证消息结果
@@ -33,6 +35,7 @@ class SocketService {
   // 密码验证回调
   Future<bool> Function(String hash)? _verifyPassword;
   bool _requiresPassword = false;
+  Future<RemoteResponse?> Function(RemoteRequest request)? _requestHandler;
   
   // 加密密钥（由外部设置）
   SecretKey? _encryptionKey;
@@ -54,6 +57,13 @@ class SocketService {
   }) {
     _requiresPassword = requiresPassword;
     _verifyPassword = verifyPassword;
+  }
+
+  /// 设置请求处理器（用于请求-响应）
+  void setRequestHandler({
+    Future<RemoteResponse?> Function(RemoteRequest request)? handler,
+  }) {
+    _requestHandler = handler;
   }
   
   /// 接收到的消息流
@@ -88,6 +98,23 @@ class SocketService {
         
         // 解析认证消息格式: AUTH:哈希\n内容
         final result = await _parseAndVerifyMessage(rawMessage);
+        if (result.success && result.message != null) {
+          // 请求-响应消息直接处理并返回
+          final request = RemoteRequestCodec.tryDecodeRequest(result.message!);
+          if (request != null) {
+            final response = await _handleRequest(request);
+            if (response != null) {
+              var payload = RemoteRequestCodec.encodeResponse(response);
+              if (_encryptionEnabled && _encryptionKey != null) {
+                payload = await EncryptionService.encrypt(payload, _encryptionKey!);
+              }
+              client.write(payload);
+              await client.flush();
+            }
+            client.close();
+            return;
+          }
+        }
         _messageController.add(result);
         client.close();
       },
@@ -95,6 +122,17 @@ class SocketService {
         client.close();
       },
     );
+  }
+
+  Future<RemoteResponse?> _handleRequest(RemoteRequest request) async {
+    if (_requestHandler == null) {
+      return RemoteResponse.fail(request.id, '请求不支持');
+    }
+    try {
+      return await _requestHandler!(request);
+    } catch (_) {
+      return RemoteResponse.fail(request.id, '请求处理失败');
+    }
   }
   
   /// 解析并验证消息
@@ -189,6 +227,57 @@ class SocketService {
       return SendResult(success: false, error: e.toString());
     }
   }
+
+  /// 发送请求并等待响应
+  Future<RemoteResponse?> sendRequest(
+    String ip,
+    int port,
+    RemoteRequest request, {
+    String? passwordHash,
+    Duration timeout = const Duration(seconds: 5),
+  }) async {
+    try {
+      final socket = await Socket.connect(ip, port, timeout: timeout);
+
+      var payload = RemoteRequestCodec.encodeRequest(request);
+      if (_encryptionEnabled && _encryptionKey != null) {
+        payload = await EncryptionService.encrypt(payload, _encryptionKey!);
+      }
+
+      final authMessage = 'AUTH:${passwordHash ?? ''}\n$payload';
+      socket.write(authMessage);
+      await socket.flush();
+
+      final responseCompleter = Completer<String>();
+      final responseBuffer = StringBuffer();
+
+      socket.listen(
+        (data) => responseBuffer.write(utf8.decode(data)),
+        onDone: () => responseCompleter.complete(responseBuffer.toString()),
+        onError: (_) => responseCompleter.complete(responseBuffer.toString()),
+      );
+
+      var responseText = await responseCompleter.future.timeout(timeout);
+      if (responseText.isEmpty) {
+        await socket.close();
+        return null;
+      }
+
+      if (EncryptionService.isEncrypted(responseText) && _encryptionKey != null) {
+        final decrypted = await EncryptionService.decrypt(responseText, _encryptionKey!);
+        if (decrypted == null) {
+          await socket.close();
+          return null;
+        }
+        responseText = decrypted;
+      }
+      final response = RemoteRequestCodec.tryDecodeResponse(responseText);
+      await socket.close();
+      return response;
+    } catch (_) {
+      return null;
+    }
+  }
   
   /// 推送剪贴板内容到多个设备(电脑端使用)
   /// 向所有已连接的手机推送剪贴板内容
@@ -216,6 +305,36 @@ class SocketService {
           await socket.flush();
           await socket.close();
         } catch (e) {
+          // 忽略单个设备的推送失败
+        }
+      }),
+    );
+  }
+
+  /// 推送控制指令到多个设备(电脑端使用)
+  Future<void> pushCommandToDevices(
+    List<Device> devices,
+    String command,
+  ) async {
+    if (devices.isEmpty) return;
+
+    var data = command;
+    if (_encryptionEnabled && _encryptionKey != null) {
+      data = await EncryptionService.encrypt(data, _encryptionKey!);
+    }
+
+    await Future.wait(
+      devices.where((d) => d.syncPort != null).map((device) async {
+        try {
+          final socket = await Socket.connect(
+            device.ip,
+            device.syncPort!,
+            timeout: const Duration(seconds: 3),
+          );
+          socket.write(data);
+          await socket.flush();
+          await socket.close();
+        } catch (_) {
           // 忽略单个设备的推送失败
         }
       }),
