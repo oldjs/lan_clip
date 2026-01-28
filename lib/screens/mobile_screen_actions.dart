@@ -291,6 +291,22 @@ extension _MobileScreenStateActions on _MobileScreenState {
     );
   }
 
+  void _toggleRemoteScreen() {
+    if (_selectedDevice == null) return;
+
+    final deviceKey = '${_selectedDevice!.ip}:${_selectedDevice!.port}';
+    final passwordHash = _devicePasswords[deviceKey];
+
+    RemoteScreenOverlayManager.toggle(
+      context,
+      device: _selectedDevice!,
+      passwordHash: passwordHash,
+      encryptionKey: _encryptionKey,
+      encryptionEnabled: _encryptionEnabled,
+    );
+    setState(() {}); // 刷新按钮状态
+  }
+
   void _openSimpleInput() {
     if (_selectedDevice == null) return;
 

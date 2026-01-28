@@ -29,6 +29,14 @@ extension _MobileScreenStateUi on _MobileScreenState {
             onPressed: _selectedDevice == null ? null : _openTouchpad,
           ),
           IconButton(
+            icon: Icon(
+              Icons.desktop_windows,
+              color: RemoteScreenOverlayManager.isShowing ? Colors.green : null,
+            ),
+            tooltip: '远程画面',
+            onPressed: _selectedDevice == null ? null : _toggleRemoteScreen,
+          ),
+          IconButton(
             icon: const Icon(Icons.apps),
             tooltip: '应用控制',
             onPressed: _selectedDevice == null ? null : _openAppGrid,

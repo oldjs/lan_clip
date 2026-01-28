@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/device.dart';
@@ -9,6 +10,7 @@ import '../services/clipboard_service.dart' show
     cmdSave, cmdNew, cmdOpen, cmdClose, cmdFind, cmdQuickOpen,
     cmdWin, cmdWinD, cmdWinE, cmdAltTab, cmdAltF4,
     cmdMouseMiddleClick;
+import '../widgets/remote_screen_overlay.dart';
 
 /// 触摸板屏幕 - 手机端控制电脑鼠标
 class TouchpadScreen extends StatefulWidget {
@@ -30,6 +32,7 @@ class _TouchpadScreenState extends State<TouchpadScreen> {
   double _sensitivity = 1.5;
   bool _isTouching = false;
   bool _shortcutsExpanded = false;  // 快捷键是否展开
+  bool _remoteScreenShowing = false; // 远程画面悬浮窗是否显示
   
   // 累积未发送的偏移量，确保精度
   double _accDx = 0;
@@ -97,6 +100,20 @@ class _TouchpadScreenState extends State<TouchpadScreen> {
     await prefs.setBool('shortcuts_expanded', value);
   }
 
+  /// 切换远程画面悬浮窗
+  void _toggleRemoteScreen() {
+    if (_remoteScreenShowing) {
+      RemoteScreenOverlayManager.hide();
+    } else {
+      RemoteScreenOverlayManager.show(
+        context,
+        device: widget.device,
+        passwordHash: widget.passwordHash,
+      );
+    }
+    setState(() => _remoteScreenShowing = !_remoteScreenShowing);
+  }
+
   /// 保存灵敏度配置
   Future<void> _saveSensitivity(double value) async {
     final prefs = await SharedPreferences.getInstance();
@@ -138,8 +155,27 @@ class _TouchpadScreenState extends State<TouchpadScreen> {
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new, size: 20),
-          onPressed: () => Navigator.of(context).pop(),
+          onPressed: () {
+            // 退出时关闭悬浮窗
+            if (_remoteScreenShowing) {
+              RemoteScreenOverlayManager.hide();
+            }
+            Navigator.of(context).pop();
+          },
         ),
+        actions: [
+          // 远程画面按钮（仅Android）
+          if (Platform.isAndroid)
+            IconButton(
+              icon: Icon(
+                Icons.desktop_windows,
+                color: _remoteScreenShowing ? Colors.cyanAccent : Colors.white70,
+                size: 22,
+              ),
+              tooltip: '远程画面',
+              onPressed: _toggleRemoteScreen,
+            ),
+        ],
       ),
       body: Column(
         children: [

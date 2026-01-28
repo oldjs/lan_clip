@@ -67,6 +67,9 @@ dependencies:
   # FFI (用于 Windows API 调用)
   ffi: ^2.1.0
   uuid: ^4.5.2
+  
+  # 图像处理 (截屏功能)
+  image: ^4.2.0
   flutter_overlay_window: ^0.5.0
   
   # 文件传输功能

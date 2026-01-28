@@ -21,6 +21,11 @@ const String _autoSendDelayKey = 'auto_send_delay';
 const String _receiveFromPcKey = 'receive_from_pc_enabled';
 const String _touchpadSensitivityKey = 'touchpad_sensitivity';
 
+// 远程画面设置键
+const String _remoteScreenIntervalKey = 'remote_screen_interval';
+const String _remoteScreenQualityKey = 'remote_screen_quality';
+const String _remoteScreenScaleKey = 'remote_screen_scale';
+
 /// 设置变更回调
 class SettingsCallbacks {
   final Function(bool)? onAutoPasteChanged;
@@ -66,6 +71,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   // 触摸板设置
   double _touchpadSensitivity = 1.5;
+
+  // 远程画面设置 (仅 Android)
+  int _remoteScreenInterval = 50;
+  int _remoteScreenQuality = 50;
+  double _remoteScreenScale = 0.5;
 
   // 安全设置
   bool _passwordEnabled = false;
@@ -125,6 +135,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
       // 触摸板
       _touchpadSensitivity = prefs.getDouble(_touchpadSensitivityKey) ?? 1.5;
+
+      // 远程画面
+      _remoteScreenInterval = prefs.getInt(_remoteScreenIntervalKey) ?? 50;
+      _remoteScreenQuality = prefs.getInt(_remoteScreenQualityKey) ?? 50;
+      _remoteScreenScale = prefs.getDouble(_remoteScreenScaleKey) ?? 0.5;
 
       // 安全
       _passwordEnabled = passwordEnabled;
@@ -273,6 +288,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble(_touchpadSensitivityKey, value);
     setState(() => _touchpadSensitivity = value);
+  }
+
+  Future<void> _setRemoteScreenInterval(int value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_remoteScreenIntervalKey, value);
+    setState(() => _remoteScreenInterval = value);
+  }
+
+  Future<void> _setRemoteScreenQuality(int value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_remoteScreenQualityKey, value);
+    setState(() => _remoteScreenQuality = value);
+  }
+
+  Future<void> _setRemoteScreenScale(double value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_remoteScreenScaleKey, value);
+    setState(() => _remoteScreenScale = value);
   }
 
   Future<void> _setPasswordEnabled(bool value) async {
@@ -568,6 +601,53 @@ class _SettingsScreenState extends State<SettingsScreen> {
                          icon: PhosphorIconsRegular.appWindow,
                          value: _overlayEnabled,
                          onChanged: _setOverlayEnabled,
+                       ),
+                     ),
+                     const SizedBox(height: 16),
+                   ],
+
+                   // 远程画面设置组（仅 Android）
+                   if (Platform.isAndroid) ...[
+                     const SettingsSectionHeader(title: '远程画面'),
+                     Card(
+                       child: Column(
+                         children: [
+                           SettingsSliderTile(
+                             title: '刷新间隔',
+                             icon: PhosphorIconsRegular.timer,
+                             value: _remoteScreenInterval.toDouble(),
+                             min: 30,
+                             max: 200,
+                             divisions: 17,
+                             suffix: 'ms',
+                             onChanged: (v) => setState(() => _remoteScreenInterval = v.round()),
+                             onChangeEnd: (v) => _setRemoteScreenInterval(v.round()),
+                           ),
+                           const Divider(height: 1),
+                           SettingsSliderTile(
+                             title: '图像质量',
+                             icon: PhosphorIconsRegular.imageSquare,
+                             value: _remoteScreenQuality.toDouble(),
+                             min: 10,
+                             max: 100,
+                             divisions: 9,
+                             suffix: '%',
+                             onChanged: (v) => setState(() => _remoteScreenQuality = v.round()),
+                             onChangeEnd: (v) => _setRemoteScreenQuality(v.round()),
+                           ),
+                           const Divider(height: 1),
+                           SettingsSliderTile(
+                             title: '画面缩放',
+                             icon: PhosphorIconsRegular.arrowsOutSimple,
+                             value: _remoteScreenScale,
+                             min: 0.2,
+                             max: 1.0,
+                             divisions: 8,
+                             suffix: 'x',
+                             onChanged: (v) => setState(() => _remoteScreenScale = v),
+                             onChangeEnd: _setRemoteScreenScale,
+                           ),
+                         ],
                        ),
                      ),
                      const SizedBox(height: 16),

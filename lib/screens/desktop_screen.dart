@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -20,6 +21,7 @@ import '../services/encryption_service.dart';
 import '../services/desktop_app_service.dart';
 import '../services/windows_process_service.dart';
 import '../services/windows_window_service.dart';
+import '../services/screen_capture_service.dart';
 import 'package:cryptography/cryptography.dart';
 
 import 'settings_screen.dart';
@@ -386,6 +388,24 @@ class _DesktopScreenState extends State<DesktopScreen>
           return RemoteResponse.fail(request.id, '激活失败');
         }
         return RemoteResponse.ok(request.id, data: {'activated': true});
+      case 'screen_capture':
+        // 截取屏幕画面
+        final quality = request.payload?['quality'] as int? ?? 50;
+        final scale = (request.payload?['scale'] as num?)?.toDouble() ?? 0.5;
+        final result = await ScreenCaptureService.capture(
+          quality: quality,
+          scale: scale,
+        );
+        if (result == null) {
+          return RemoteResponse.fail(request.id, '截图失败');
+        }
+        return RemoteResponse.ok(request.id, data: {
+          'image': base64Encode(result.imageData),
+          'cursorX': result.cursorX,
+          'cursorY': result.cursorY,
+          'width': result.screenWidth,
+          'height': result.screenHeight,
+        });
       default:
         return RemoteResponse.fail(request.id, '未知指令');
     }
