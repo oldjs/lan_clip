@@ -7,7 +7,8 @@ import '../services/clipboard_service.dart' show
     cmdCopy, cmdPaste, cmdCut, cmdUndo, cmdRedo,
     cmdTab, cmdEsc, cmdHome, cmdDelete,
     cmdSave, cmdNew, cmdOpen, cmdClose, cmdFind, cmdQuickOpen,
-    cmdWin, cmdWinD, cmdWinE, cmdAltTab, cmdAltF4;
+    cmdWin, cmdWinD, cmdWinE, cmdAltTab, cmdAltF4,
+    cmdMouseMiddleClick;
 
 /// 触摸板屏幕 - 手机端控制电脑鼠标
 class TouchpadScreen extends StatefulWidget {
@@ -291,6 +292,14 @@ class _TouchpadScreenState extends State<TouchpadScreen> {
               () => _sendCommand('CMD:MOUSE_LEFT_CLICK'),
               onLongPress: () => _sendCommand('CMD:MOUSE_LEFT_DOWN'),
               onLongPressEnd: () => _sendCommand('CMD:MOUSE_LEFT_UP'),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            flex: 1,
+            child: _buildActionButton(
+              '中键',
+              () => _sendCommand(cmdMouseMiddleClick),
             ),
           ),
           const SizedBox(width: 12),

@@ -20,6 +20,7 @@ const String cmdMouseLeftClick = '${cmdPrefix}MOUSE_LEFT_CLICK';
 const String cmdMouseRightClick = '${cmdPrefix}MOUSE_RIGHT_CLICK';
 const String cmdMouseLeftDown = '${cmdPrefix}MOUSE_LEFT_DOWN';
 const String cmdMouseLeftUp = '${cmdPrefix}MOUSE_LEFT_UP';
+const String cmdMouseMiddleClick = '${cmdPrefix}MOUSE_MIDDLE_CLICK';
 const String cmdMouseScroll = '${cmdPrefix}MOUSE_SCROLL';
 
 // 快捷键指令
@@ -124,6 +125,10 @@ class ClipboardService {
         return null;
       case cmdMouseLeftUp:
         MouseService().leftUp();
+        return null;
+      case cmdMouseMiddleClick:
+        MouseService().middleDown();
+        MouseService().middleUp();
         return null;
       // 快捷键指令
       case cmdCopy:
