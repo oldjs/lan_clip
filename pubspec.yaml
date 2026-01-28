@@ -75,7 +75,7 @@ dependencies:
   permission_handler: ^11.3.1
   device_info_plus: ^10.1.0
   open_filex: ^4.5.0
-  device_policy_manager: ^0.2.0
+  device_policy_manager: ^1.0.0
   google_fonts: ^8.0.0
   phosphor_flutter: ^2.1.0
 
