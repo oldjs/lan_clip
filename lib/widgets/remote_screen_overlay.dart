@@ -39,12 +39,16 @@ class _RemoteScreenOverlayState extends State<RemoteScreenOverlay> with WidgetsB
   
   // 悬浮窗状态
   bool _isExpanded = false;
-  bool _isLoading = false;
   Uint8List? _imageData;
   int _cursorX = 0;
   int _cursorY = 0;
   int _screenWidth = 0;
   int _screenHeight = 0;
+  
+  // 连接状态: null=初始, true=已连接, false=连接失败
+  bool? _connectionStatus;
+  String? _errorMessage;
+  int _failureCount = 0; // 连续失败计数
   
   // 位置
   double _posX = 20;
@@ -68,9 +72,11 @@ class _RemoteScreenOverlayState extends State<RemoteScreenOverlay> with WidgetsB
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _loadSettings();
-    if (widget.encryptionEnabled && widget.encryptionKey != null) {
-      _socketService.setEncryption(enabled: true, key: widget.encryptionKey);
-    }
+    // 设置加密（有密钥就设置，让发送时加密状态正确）
+    _socketService.setEncryption(
+      enabled: widget.encryptionEnabled,
+      key: widget.encryptionKey,
+    );
   }
 
   @override
@@ -120,7 +126,7 @@ class _RemoteScreenOverlayState extends State<RemoteScreenOverlay> with WidgetsB
   }
 
   Future<void> _requestCapture() async {
-    if (_isLoading || !_isExpanded) return;
+    if (!_isExpanded) return;
     
     try {
       final request = RemoteRequest(
@@ -137,12 +143,13 @@ class _RemoteScreenOverlayState extends State<RemoteScreenOverlay> with WidgetsB
         widget.device.port,
         request,
         passwordHash: widget.passwordHash,
-        timeout: const Duration(seconds: 5),
+        timeout: const Duration(seconds: 8),
       );
 
-      if (response != null && response.ok && response.data != null && mounted && _isExpanded) {
+      if (!mounted || !_isExpanded) return;
+      
+      if (response != null && response.ok && response.data != null) {
         final data = response.data!;
-        // 图像数据可能是List<int>或base64字符串
         Uint8List? imageBytes;
         if (data['image'] is List) {
           imageBytes = Uint8List.fromList(List<int>.from(data['image']));
@@ -157,11 +164,29 @@ class _RemoteScreenOverlayState extends State<RemoteScreenOverlay> with WidgetsB
             _cursorY = data['cursorY'] ?? 0;
             _screenWidth = data['width'] ?? 0;
             _screenHeight = data['height'] ?? 0;
+            _connectionStatus = true;
+            _errorMessage = null;
+            _failureCount = 0;
+          });
+        }
+      } else {
+        // 请求失败
+        _failureCount++;
+        if (_failureCount >= 3 && mounted) {
+          setState(() {
+            _connectionStatus = false;
+            _errorMessage = response?.error ?? '连接失败';
           });
         }
       }
     } catch (e) {
-      // 静默处理错误，继续下一次请求
+      _failureCount++;
+      if (_failureCount >= 3 && mounted) {
+        setState(() {
+          _connectionStatus = false;
+          _errorMessage = '网络错误';
+        });
+      }
     }
   }
 
@@ -169,10 +194,16 @@ class _RemoteScreenOverlayState extends State<RemoteScreenOverlay> with WidgetsB
     setState(() {
       _isExpanded = !_isExpanded;
       if (_isExpanded) {
+        // 重置状态
+        _connectionStatus = null;
+        _errorMessage = null;
+        _failureCount = 0;
         _startCapture();
       } else {
         _stopCapture();
         _imageData = null;
+        _connectionStatus = null;
+        _errorMessage = null;
       }
     });
   }
@@ -325,6 +356,46 @@ class _RemoteScreenOverlayState extends State<RemoteScreenOverlay> with WidgetsB
   }
 
   Widget _buildScreenContent() {
+    // 连接失败状态
+    if (_connectionStatus == false) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.error_outline, color: Colors.red, size: 28),
+            const SizedBox(height: 8),
+            Text(
+              _errorMessage ?? '连接失败',
+              style: const TextStyle(color: Colors.white54, fontSize: 12),
+            ),
+            const SizedBox(height: 8),
+            GestureDetector(
+              onTap: () {
+                setState(() {
+                  _connectionStatus = null;
+                  _failureCount = 0;
+                  _errorMessage = null;
+                });
+                _startCapture();
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade700,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: const Text(
+                  '重试',
+                  style: TextStyle(color: Colors.white, fontSize: 12),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    
+    // 未连接/正在连接
     if (_imageData == null) {
       return const Center(
         child: Column(
@@ -353,7 +424,6 @@ class _RemoteScreenOverlayState extends State<RemoteScreenOverlay> with WidgetsB
           fit: BoxFit.contain,
           gaplessPlayback: true, // 防止闪烁
         ),
-        // 这里不再单独绘制光标，因为PC端已经把光标绘制到截图中了
       ],
     );
   }

@@ -305,8 +305,21 @@ class FileTransferService {
     );
   }
 
-  /// 接受传输
-  void _acceptTransfer(Socket socket, FileTransferTask task, FileTransferMeta meta) {
+  /// 接受传输（确保目录存在）
+  void _acceptTransfer(Socket socket, FileTransferTask task, FileTransferMeta meta) async {
+    // 确保下载目录存在
+    final dir = Directory(task.localPath).parent;
+    if (!await dir.exists()) {
+      try {
+        await dir.create(recursive: true);
+      } catch (_) {
+        // 目录创建失败，取消传输
+        socket.write('${TransferProtocol.prefixReject}${task.id}\n');
+        _updateTask(task.copyWith(status: TransferStatus.failed));
+        return;
+      }
+    }
+    
     // 检查是否存在部分文件(断点续传)
     final file = File(task.localPath);
     int resumeFrom = 0;
@@ -671,7 +684,7 @@ class FileTransferService {
     _taskController.add(List.unmodifiable(_tasks));
   }
 
-  /// 获取下载路径
+  /// 获取下载路径（不自动创建目录）
   Future<String> getDownloadPath() async {
     final prefs = await SharedPreferences.getInstance();
     final customPath = prefs.getString(_downloadPathKey);
@@ -698,11 +711,22 @@ class FileTransferService {
       basePath = '$home/Downloads';
     }
     
-    final downloadDir = Directory('$basePath/LanClip');
-    if (!await downloadDir.exists()) {
-      await downloadDir.create(recursive: true);
+    return '$basePath/LanClip';
+  }
+  
+  /// 确保下载目录存在（需要存储权限时调用）
+  Future<bool> ensureDownloadDirExists() async {
+    final downloadPath = await getDownloadPath();
+    final dir = Directory(downloadPath);
+    if (!await dir.exists()) {
+      try {
+        await dir.create(recursive: true);
+        return true;
+      } catch (_) {
+        return false;
+      }
     }
-    return downloadDir.path;
+    return true;
   }
 
   /// 设置下载路径

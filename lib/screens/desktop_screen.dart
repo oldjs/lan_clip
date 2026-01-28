@@ -269,7 +269,8 @@ class _DesktopScreenState extends State<DesktopScreen>
   /// 通过定期触发空操作来保持事件循环活跃
   void _startKeepAliveTimer() {
     _keepAliveTimer?.cancel();
-    _keepAliveTimer = Timer.periodic(const Duration(milliseconds: 100), (_) {
+    // 1秒间隔足够保持事件循环活跃，同时不会消耗过多 CPU
+    _keepAliveTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       // 空操作，仅用于保持事件循环活跃
     });
   }

@@ -3,6 +3,7 @@ import 'dart:ffi';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:ffi/ffi.dart';
+import 'package:flutter/foundation.dart';
 import 'package:image/image.dart' as img;
 
 // Windows API bindings
@@ -148,6 +149,14 @@ class ScreenCaptureResult {
 /// PC端截屏服务
 class ScreenCaptureService {
   static bool get isSupported => Platform.isWindows;
+  
+  // 缓存上一帧，节流时返回缓存
+  static ScreenCaptureResult? _lastResult;
+  static DateTime? _lastCaptureTime;
+  static const _minInterval = Duration(milliseconds: 50);
+  
+  // 防止并发截图
+  static bool _isCapturing = false;
 
   /// 截取屏幕（包含鼠标光标）
   /// [quality] JPEG压缩质量 1-100，默认50
@@ -157,6 +166,22 @@ class ScreenCaptureService {
     double scale = 0.5,
   }) async {
     if (!isSupported) return null;
+    
+    // 防止并发
+    if (_isCapturing) {
+      return _lastResult;
+    }
+    
+    // 节流：返回缓存帧
+    final now = DateTime.now();
+    if (_lastCaptureTime != null && 
+        now.difference(_lastCaptureTime!) < _minInterval &&
+        _lastResult != null) {
+      return _lastResult;
+    }
+    
+    _isCapturing = true;
+    _lastCaptureTime = now;
 
     try {
       // 获取屏幕尺寸
@@ -205,17 +230,10 @@ class ScreenCaptureService {
 
       _getDIBits(hdcMem, hBitmap, 0, screenHeight, pixelData.cast(), bmi, _DIB_RGB_COLORS);
 
-      // 转换为Dart Uint8List (BGRA -> RGBA)
-      final pixels = pixelData.asTypedList(pixelDataSize);
-      final rgbaPixels = Uint8List(pixelDataSize);
-      for (var i = 0; i < pixelDataSize; i += 4) {
-        rgbaPixels[i] = pixels[i + 2];     // R
-        rgbaPixels[i + 1] = pixels[i + 1]; // G
-        rgbaPixels[i + 2] = pixels[i];     // B
-        rgbaPixels[i + 3] = 255;           // A
-      }
+      // 复制像素数据到 Dart 内存（FFI 内存需要及时释放）
+      final pixels = Uint8List.fromList(pixelData.asTypedList(pixelDataSize));
 
-      // 清理资源
+      // 清理 FFI 资源
       calloc.free(pixelData);
       calloc.free(bmi);
       _selectObject(hdcMem, hOldBitmap);
@@ -223,31 +241,88 @@ class ScreenCaptureService {
       _deleteDC(hdcMem);
       _releaseDC(0, hdcScreen);
 
-      // 使用image包处理图像
-      final image = img.Image.fromBytes(
-        width: screenWidth,
-        height: screenHeight,
-        bytes: rgbaPixels.buffer,
-        numChannels: 4,
-      );
+      // 在 isolate 中处理图像（BGRA转换、缩放、JPEG编码）
+      final result = await compute(_processImage, _ImageProcessParams(
+        pixels: pixels,
+        screenWidth: screenWidth,
+        screenHeight: screenHeight,
+        scale: scale,
+        quality: quality,
+        cursorX: cursorX,
+        cursorY: cursorY,
+      ));
 
-      // 缩放
-      final scaledWidth = (screenWidth * scale).round();
-      final scaledHeight = (screenHeight * scale).round();
-      final scaledImage = img.copyResize(image, width: scaledWidth, height: scaledHeight);
-
-      // 编码为JPEG
-      final jpegData = img.encodeJpg(scaledImage, quality: quality);
-
-      return ScreenCaptureResult(
-        imageData: Uint8List.fromList(jpegData),
-        cursorX: (cursorX * scale).round(),
-        cursorY: (cursorY * scale).round(),
-        screenWidth: scaledWidth,
-        screenHeight: scaledHeight,
-      );
+      _isCapturing = false;
+      if (result != null) {
+        _lastResult = result;
+      }
+      return result;
     } catch (e) {
-      return null;
+      _isCapturing = false;
+      return _lastResult;
     }
+  }
+}
+
+/// 图像处理参数
+class _ImageProcessParams {
+  final Uint8List pixels;
+  final int screenWidth;
+  final int screenHeight;
+  final double scale;
+  final int quality;
+  final int cursorX;
+  final int cursorY;
+
+  _ImageProcessParams({
+    required this.pixels,
+    required this.screenWidth,
+    required this.screenHeight,
+    required this.scale,
+    required this.quality,
+    required this.cursorX,
+    required this.cursorY,
+  });
+}
+
+/// 在 isolate 中处理图像
+ScreenCaptureResult? _processImage(_ImageProcessParams params) {
+  try {
+    final pixelDataSize = params.pixels.length;
+    
+    // BGRA -> RGBA 转换
+    final rgbaPixels = Uint8List(pixelDataSize);
+    for (var i = 0; i < pixelDataSize; i += 4) {
+      rgbaPixels[i] = params.pixels[i + 2];     // R
+      rgbaPixels[i + 1] = params.pixels[i + 1]; // G
+      rgbaPixels[i + 2] = params.pixels[i];     // B
+      rgbaPixels[i + 3] = 255;                  // A
+    }
+
+    // 创建图像
+    final image = img.Image.fromBytes(
+      width: params.screenWidth,
+      height: params.screenHeight,
+      bytes: rgbaPixels.buffer,
+      numChannels: 4,
+    );
+
+    // 缩放
+    final scaledWidth = (params.screenWidth * params.scale).round();
+    final scaledHeight = (params.screenHeight * params.scale).round();
+    final scaledImage = img.copyResize(image, width: scaledWidth, height: scaledHeight);
+
+    // 编码为 JPEG
+    final jpegData = img.encodeJpg(scaledImage, quality: params.quality);
+
+    return ScreenCaptureResult(
+      imageData: Uint8List.fromList(jpegData),
+      cursorX: (params.cursorX * params.scale).round(),
+      cursorY: (params.cursorY * params.scale).round(),
+      screenWidth: scaledWidth,
+      screenHeight: scaledHeight,
+    );
+  } catch (e) {
+    return null;
   }
 }

@@ -199,6 +199,8 @@ try {
 - `encryptionEnabled` 必须与 `passwordEnabled` 联动，否则密钥为空导致解密失败
 - `setEncryption(enabled: true, key: null)` 时应自动回退为禁用
 - 密钥派生路径：`AuthService.hashPassword()` -> `EncryptionService.deriveKey(hash)`
+- **加密状态同步陷阱**：手机端各页面/组件必须从 `EncryptionService.isEncryptionEnabled()` 读取加密状态，不能因为 `device.requiresPassword` 就强制开启加密，否则与 PC 端不一致导致解密失败
+- 新建 `SocketService()` 实例后必须立即调用 `setEncryption()`，否则加密参数为空
 
 ### 平台差异
 - Windows 隐藏标题栏：`WindowOptions.titleBarStyle: TitleBarStyle.hidden`
@@ -230,6 +232,8 @@ try {
 - 进程控制用 PowerShell：`Start-Process`, `Get-Process`, `WScript.Shell.AppActivate`
 - 电脑控制手机指令走 `syncPort` 通道（`SocketService.pushCommandToDevices`）
 - FFI 调用 `user32.dll`/`gdi32.dll` 实现鼠标控制和屏幕截图
+- **屏幕截图 CPU 优化**：`ScreenCaptureService.capture()` 必须用 `compute()` 将图像处理（BGRA转换、缩放、JPEG编码）放到 isolate，否则主线程 CPU 占用极高
+- **截图节流**：高频截图请求需节流 + 缓存上一帧，防止并发截图导致卡顿
 
 ### 单例模式
 - `FileTransferService` 使用单例：`factory FileTransferService() => _instance;`
@@ -247,3 +251,9 @@ try {
 
 - 禁止在代码和字符串中使用 Emoji
 - 禁止使用 Emoji 替代图标（使用 `phosphor_flutter` 图标库）
+
+## 核心原则
+
+1. **代码没错误没用，功能要能用**
+2. **软件是给用户用的，不是给 flutter analyze 用的**
+3. **做到完美，不然别做**
