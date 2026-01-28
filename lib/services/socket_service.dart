@@ -13,8 +13,9 @@ class AuthResult {
   final bool success;
   final String? message;
   final String? error;
+  final bool wasEncrypted;
 
-  AuthResult({required this.success, this.message, this.error});
+  AuthResult({required this.success, this.message, this.error, this.wasEncrypted = false});
 }
 
 /// 发送结果
@@ -110,7 +111,8 @@ class SocketService {
             final response = await _handleRequest(request);
             if (response != null) {
               var payload = RemoteRequestCodec.encodeResponse(response);
-              if (_encryptionEnabled && _encryptionKey != null) {
+              // 只有当请求是加密的才加密响应（通过 result.wasEncrypted 判断）
+              if (result.wasEncrypted && _encryptionEnabled && _encryptionKey != null) {
                 payload = await EncryptionService.encrypt(payload, _encryptionKey!);
               }
               client.write(payload);
@@ -169,7 +171,8 @@ class SocketService {
     // 不需要密码时，任何认证都通过
     if (!_requiresPassword) {
       // 检查内容是否加密
-      if (EncryptionService.isEncrypted(content)) {
+      bool wasEncrypted = EncryptionService.isEncrypted(content);
+      if (wasEncrypted) {
         if (_encryptionKey != null) {
           final decrypted = await EncryptionService.decrypt(content, _encryptionKey!);
           if (decrypted != null) {
@@ -179,7 +182,7 @@ class SocketService {
           }
         }
       }
-      return AuthResult(success: true, message: content);
+      return AuthResult(success: true, message: content, wasEncrypted: wasEncrypted);
     }
     
     // 需要密码时验证哈希
@@ -191,7 +194,8 @@ class SocketService {
       final valid = await _verifyPassword!(hash);
       if (valid) {
         // 检查内容是否加密
-        if (EncryptionService.isEncrypted(content)) {
+        bool wasEncrypted = EncryptionService.isEncrypted(content);
+        if (wasEncrypted) {
           if (_encryptionKey != null) {
             final decrypted = await EncryptionService.decrypt(content, _encryptionKey!);
             if (decrypted != null) {
@@ -201,7 +205,7 @@ class SocketService {
             }
           }
         }
-        return AuthResult(success: true, message: content);
+        return AuthResult(success: true, message: content, wasEncrypted: wasEncrypted);
       }
       return AuthResult(success: false, error: '密码错误');
     }

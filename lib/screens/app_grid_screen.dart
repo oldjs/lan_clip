@@ -49,13 +49,17 @@ class _AppGridScreenState extends State<AppGridScreen> {
     // 初始化加密设置
     _encryptionEnabled = await EncryptionService.isEncryptionEnabled();
     
-    // 当设备需要密码且已有密码哈希时，始终派生密钥
-    // PC端可能启用了加密，需要确保能解密响应
+    // 当设备需要密码且已有密码哈希时，派生密钥
     if (widget.device.requiresPassword && _passwordHash != null) {
       _encryptionKey = await EncryptionService.deriveKey(_passwordHash!);
-      _encryptionEnabled = true; // 匹配PC端的加密设置
+      _encryptionEnabled = true;
     } else if (_encryptionEnabled && _passwordHash != null) {
       _encryptionKey = await EncryptionService.deriveKey(_passwordHash!);
+    }
+    
+    // 重要：如果没有密钥但启用了加密，禁用加密以避免解密失败
+    if (_encryptionEnabled && _encryptionKey == null) {
+      _encryptionEnabled = false;
     }
     
     _socketService.setEncryption(enabled: _encryptionEnabled, key: _encryptionKey);
@@ -65,7 +69,6 @@ class _AppGridScreenState extends State<AppGridScreen> {
 
   Future<void> _loadApps() async {
     setState(() => _loading = true);
-    // 请求应用列表
     final response = await _sendRequest('app_list', null);
     if (response?.ok == true) {
       _apps

@@ -93,6 +93,9 @@ class _MobileScreenState extends State<MobileScreen> {
 
   int _memoryCount = 0;
 
+  // 底部导航当前索引：0=发送端，1=触摸板
+  int _currentTabIndex = 0;
+
   @override
   void initState() {
     super.initState();

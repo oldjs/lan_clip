@@ -27,6 +27,21 @@ class TouchpadScreen extends StatefulWidget {
   State<TouchpadScreen> createState() => _TouchpadScreenState();
 }
 
+/// 可嵌入的触摸板内容（用于底部导航）
+class EmbeddedTouchpadContent extends StatefulWidget {
+  final Device device;
+  final String? passwordHash;
+
+  const EmbeddedTouchpadContent({
+    super.key,
+    required this.device,
+    this.passwordHash,
+  });
+
+  @override
+  State<EmbeddedTouchpadContent> createState() => _EmbeddedTouchpadContentState();
+}
+
 class _TouchpadScreenState extends State<TouchpadScreen> {
   final SocketService _socketService = SocketService();
   double _sensitivity = 1.5;
@@ -496,6 +511,395 @@ class _TouchpadScreenState extends State<TouchpadScreen> {
     return Listener(
       onPointerDown: (_) {
         // 触碰立即滚动一次，然后每 150ms 连续滚动（delta=1 为最小滚动单位）
+        final delta = isUp ? 1 : -1;
+        _sendCommand('CMD:MOUSE_SCROLL:$delta');
+        _scrollTimer = Timer.periodic(const Duration(milliseconds: 150), (_) {
+          _sendCommand('CMD:MOUSE_SCROLL:$delta');
+        });
+      },
+      onPointerUp: (_) {
+        _scrollTimer?.cancel();
+        _scrollTimer = null;
+      },
+      onPointerCancel: (_) {
+        _scrollTimer?.cancel();
+        _scrollTimer = null;
+      },
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.05),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.white12),
+        ),
+        alignment: Alignment.center,
+        child: Icon(
+          isUp ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+          color: Colors.white38,
+          size: 28,
+        ),
+      ),
+    );
+  }
+}
+
+/// 嵌入式触摸板状态（复用核心逻辑）
+class _EmbeddedTouchpadContentState extends State<EmbeddedTouchpadContent> {
+  final SocketService _socketService = SocketService();
+  double _sensitivity = 1.5;
+  bool _isTouching = false;
+  bool _shortcutsExpanded = false;
+  
+  double _accDx = 0;
+  double _accDy = 0;
+  final Map<int, Offset> _pointers = {};
+  double? _lastScrollY;
+  Offset? _lastLongPressPosition;
+  Timer? _scrollTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSensitivity();
+  }
+
+  Future<void> _loadSensitivity() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _sensitivity = prefs.getDouble('touchpad_sensitivity') ?? 1.5;
+      _shortcutsExpanded = prefs.getBool('shortcuts_expanded') ?? false;
+    });
+  }
+
+  Future<void> _saveShortcutsExpanded(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('shortcuts_expanded', value);
+  }
+
+  Future<void> _saveSensitivity(double value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble('touchpad_sensitivity', value);
+  }
+
+  void _sendCommand(String command) {
+    _socketService.sendMessage(
+      widget.device.ip,
+      widget.device.port,
+      command,
+      passwordHash: widget.passwordHash,
+    );
+  }
+
+  void _sendMoveCommand(double dx, double dy) {
+    _accDx += dx * _sensitivity;
+    _accDy += dy * _sensitivity;
+    int moveX = _accDx.toInt();
+    int moveY = _accDy.toInt();
+    if (moveX != 0 || moveY != 0) {
+      _sendCommand('CMD:MOUSE_MOVE:$moveX:$moveY');
+      _accDx -= moveX;
+      _accDy -= moveY;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: const Color(0xFF0F0F0F),
+      child: Column(
+        children: [
+          _buildSensitivitySlider(),
+          Expanded(child: _buildTouchpadArea()),
+          _buildMouseButtons(),
+          _buildShortcutsSection(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSensitivitySlider() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      child: Row(
+        children: [
+          const Text('灵敏度', style: TextStyle(color: Colors.white70, fontSize: 13)),
+          const SizedBox(width: 8),
+          Expanded(
+            child: SliderTheme(
+              data: SliderTheme.of(context).copyWith(
+                activeTrackColor: Colors.cyanAccent,
+                inactiveTrackColor: Colors.white12,
+                thumbColor: Colors.cyanAccent,
+                overlayColor: Colors.cyanAccent.withOpacity(0.2),
+                trackHeight: 2,
+                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+              ),
+              child: Slider(
+                value: _sensitivity,
+                min: 0.5,
+                max: 3.0,
+                onChanged: (value) => setState(() => _sensitivity = value),
+                onChangeEnd: _saveSensitivity,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          SizedBox(
+            width: 32,
+            child: Text('${_sensitivity.toStringAsFixed(1)}x',
+                style: const TextStyle(color: Colors.cyanAccent, fontSize: 13)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTouchpadArea() {
+    return Container(
+      margin: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: _isTouching ? Colors.white.withOpacity(0.05) : Colors.white.withOpacity(0.02),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.white12, width: 1),
+      ),
+      child: Listener(
+        onPointerDown: (e) {
+          setState(() {
+            _isTouching = true;
+            _pointers[e.pointer] = e.position;
+          });
+        },
+        onPointerMove: (e) {
+          _pointers[e.pointer] = e.position;
+          if (_pointers.length == 2) {
+            double currentY = 0;
+            for (var pos in _pointers.values) {
+              currentY += pos.dy;
+            }
+            currentY /= 2;
+            if (_lastScrollY != null) {
+              int delta = ((_lastScrollY! - currentY) * 0.3).toInt();
+              if (delta != 0) {
+                _sendCommand('CMD:MOUSE_SCROLL:$delta');
+              }
+            }
+            _lastScrollY = currentY;
+          }
+        },
+        onPointerUp: (e) {
+          setState(() {
+            _pointers.remove(e.pointer);
+            if (_pointers.isEmpty) {
+              _isTouching = false;
+              _lastScrollY = null;
+            }
+          });
+        },
+        onPointerCancel: (e) {
+          setState(() {
+            _pointers.remove(e.pointer);
+            if (_pointers.isEmpty) {
+              _isTouching = false;
+              _lastScrollY = null;
+            }
+          });
+        },
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onPanUpdate: (details) {
+            if (_pointers.length <= 1) {
+              _sendMoveCommand(details.delta.dx, details.delta.dy);
+            }
+          },
+          onTap: () => _sendCommand('CMD:MOUSE_LEFT_CLICK'),
+          onLongPressStart: (details) {
+            _sendCommand('CMD:MOUSE_LEFT_DOWN');
+            _lastLongPressPosition = details.localPosition;
+          },
+          onLongPressMoveUpdate: (details) {
+            if (_lastLongPressPosition != null) {
+              final delta = details.localPosition - _lastLongPressPosition!;
+              _sendMoveCommand(delta.dx, delta.dy);
+              _lastLongPressPosition = details.localPosition;
+            }
+          },
+          onLongPressEnd: (_) {
+            _sendCommand('CMD:MOUSE_LEFT_UP');
+            _lastLongPressPosition = null;
+          },
+          child: const Center(
+            child: Icon(Icons.touch_app_outlined, color: Colors.white10, size: 80),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMouseButtons() {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+      height: 80,
+      child: Row(
+        children: [
+          Expanded(
+            flex: 2,
+            child: _buildActionButton(
+              '左键',
+              () => _sendCommand('CMD:MOUSE_LEFT_CLICK'),
+              onLongPress: () => _sendCommand('CMD:MOUSE_LEFT_DOWN'),
+              onLongPressEnd: () => _sendCommand('CMD:MOUSE_LEFT_UP'),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            flex: 1,
+            child: _buildActionButton(
+              '中键',
+              () => _sendCommand(cmdMouseMiddleClick),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            flex: 1,
+            child: Column(
+              children: [
+                Expanded(child: _buildScrollButton(isUp: true)),
+                const SizedBox(height: 6),
+                Expanded(child: _buildScrollButton(isUp: false)),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            flex: 2,
+            child: _buildActionButton(
+              '右键',
+              () => _sendCommand('CMD:MOUSE_RIGHT_CLICK'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildShortcutsSection() {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          GestureDetector(
+            onTap: () {
+              setState(() => _shortcutsExpanded = !_shortcutsExpanded);
+              _saveShortcutsExpanded(_shortcutsExpanded);
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              color: Colors.transparent,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('快捷键', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                  Icon(
+                    _shortcutsExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                    color: Colors.white38,
+                    size: 20,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          AnimatedCrossFade(
+            firstChild: _buildShortcutRow(_TouchpadScreenState._editShortcuts),
+            secondChild: _buildAllShortcutRows(),
+            crossFadeState: _shortcutsExpanded 
+                ? CrossFadeState.showSecond 
+                : CrossFadeState.showFirst,
+            duration: const Duration(milliseconds: 200),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildShortcutRow(List<_ShortcutItem> items) {
+    return SizedBox(
+      height: 40,
+      child: Row(
+        children: items.asMap().entries.map((entry) {
+          final item = entry.value;
+          final isLast = entry.key == items.length - 1;
+          return Expanded(
+            child: Padding(
+              padding: EdgeInsets.only(right: isLast ? 0 : 6),
+              child: _buildSmallButton(item.label, item.command, item.icon),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget _buildAllShortcutRows() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _buildShortcutRow(_TouchpadScreenState._editShortcuts),
+        const SizedBox(height: 6),
+        _buildShortcutRow(_TouchpadScreenState._navShortcuts),
+        const SizedBox(height: 6),
+        _buildShortcutRow(_TouchpadScreenState._fileShortcuts),
+        const SizedBox(height: 6),
+        _buildShortcutRow(_TouchpadScreenState._sysShortcuts),
+      ],
+    );
+  }
+
+  Widget _buildSmallButton(String label, String command, IconData icon) {
+    return GestureDetector(
+      onTap: () => _sendCommand(command),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.cyanAccent.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.cyanAccent.withOpacity(0.3)),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, color: Colors.cyanAccent, size: 16),
+            const SizedBox(height: 2),
+            Text(label, style: const TextStyle(color: Colors.cyanAccent, fontSize: 10)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActionButton(String label, VoidCallback onTap, 
+      {VoidCallback? onLongPress, VoidCallback? onLongPressEnd}) {
+    return GestureDetector(
+      onTap: onTap,
+      onLongPress: onLongPress,
+      onLongPressUp: onLongPressEnd,
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Colors.white.withOpacity(0.1), Colors.white.withOpacity(0.05)],
+          ),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.white12),
+        ),
+        alignment: Alignment.center,
+        child: Text(label, style: const TextStyle(color: Colors.white70, fontSize: 16)),
+      ),
+    );
+  }
+  
+  Widget _buildScrollButton({required bool isUp}) {
+    return Listener(
+      onPointerDown: (_) {
         final delta = isUp ? 1 : -1;
         _sendCommand('CMD:MOUSE_SCROLL:$delta');
         _scrollTimer = Timer.periodic(const Duration(milliseconds: 150), (_) {
