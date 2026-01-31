@@ -57,11 +57,6 @@ typedef _GetDIBitsC = Int32 Function(IntPtr hdc, IntPtr hbm, Uint32 start, Uint3
 typedef _GetDIBitsDart = int Function(int hdc, int hbm, int start, int cLines, Pointer<Void> lpvBits, Pointer<_BITMAPINFO> lpbmi, int usage);
 final _getDIBits = _gdi32.lookupFunction<_GetDIBitsC, _GetDIBitsDart>('GetDIBits');
 
-// GetCursorPos
-typedef _GetCursorPosC = Int32 Function(Pointer<_POINT> lpPoint);
-typedef _GetCursorPosDart = int Function(Pointer<_POINT> lpPoint);
-final _getCursorPos = _user32.lookupFunction<_GetCursorPosC, _GetCursorPosDart>('GetCursorPos');
-
 // GetCursorInfo
 typedef _GetCursorInfoC = Int32 Function(Pointer<_CURSORINFO> pci);
 typedef _GetCursorInfoDart = int Function(Pointer<_CURSORINFO> pci);

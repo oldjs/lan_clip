@@ -76,6 +76,8 @@ class _QRScanScreenState extends State<QRScanScreen> {
     // 尝试连接
     try {
       final socketService = SocketService();
+      // 扫码连接不需要加密（二维码会话已验证身份）
+      socketService.setEncryption(enabled: false, key: null);
       final connected = await socketService.connectToDevice(device);
       
       if (connected && mounted) {

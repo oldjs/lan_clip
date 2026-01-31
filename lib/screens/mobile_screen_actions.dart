@@ -274,23 +274,6 @@ extension _MobileScreenStateActions on _MobileScreenState {
     }
   }
 
-  void _openTouchpad() {
-    if (_selectedDevice == null) return;
-
-    final deviceKey = '${_selectedDevice!.ip}:${_selectedDevice!.port}';
-    final passwordHash = _devicePasswords[deviceKey];
-
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => TouchpadScreen(
-          device: _selectedDevice!,
-          passwordHash: passwordHash,
-        ),
-      ),
-    );
-  }
-
   void _toggleRemoteScreen() {
     if (_selectedDevice == null) return;
 

@@ -14,7 +14,7 @@ class DiscoveryService {
   final _connectedDeviceController = StreamController<Device>.broadcast(); // 电脑端记录连接的手机
   String _deviceName = 'Unknown';
   int _tcpPort = 8888;
-  int? _syncPort;               // 剪贴板同步端口(手机端)
+  int? _syncPort;               // 剪贴板同步端口(手机端) - 用于发送广播时记录
   bool _requiresPassword = false;  // 是否需要密码验证
   String? _salt;                    // 密码盐值
   

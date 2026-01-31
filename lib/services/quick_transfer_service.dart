@@ -16,6 +16,7 @@ class QuickTransferService {
   // 当前活跃的会话
   QRSession? _currentSession;
   Timer? _timeoutTimer;
+  // ignore: unused_field - 保留用于未来扩展客户端连接回调
   Function(Socket socket)? _onClientConnected;
   
   /// 当前会话
@@ -38,11 +39,11 @@ class QuickTransferService {
       
       for (final interface in interfaces) {
         for (final addr in interface.addresses) {
-          // 跳过 loopback 和虚拟网卡
+          // 跳过 loopback 和虚拟网卡，优先选择常见网卡
           if (!addr.isLoopback && 
               !addr.address.startsWith('169.254') &&
               !addr.address.startsWith('127.') &&
-              interface.name.toLowerCase().contains(RegExp(r'wifi|ethernet|以太网|wlan', caseSensitive: false))) {
+              RegExp(r'wifi|ethernet|以太网|wlan', caseSensitive: false).hasMatch(interface.name)) {
             return addr.address;
           }
         }
