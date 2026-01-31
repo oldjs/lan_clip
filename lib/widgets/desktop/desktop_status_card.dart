@@ -7,6 +7,7 @@ class DesktopStatusCard extends StatefulWidget {
   final String localIp;
   final int tcpPort;
   final int connectedDeviceCount;
+  final VoidCallback? onShowQR;
 
   const DesktopStatusCard({
     super.key,
@@ -14,6 +15,7 @@ class DesktopStatusCard extends StatefulWidget {
     required this.localIp,
     required this.tcpPort,
     this.connectedDeviceCount = 0,
+    this.onShowQR,
   });
 
   @override
@@ -87,6 +89,18 @@ class _DesktopStatusCardState extends State<DesktopStatusCard> {
                       value: widget.connectedDeviceCount > 0
                           ? '${widget.connectedDeviceCount} 台'
                           : '无',
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: FilledButton.icon(
+                            onPressed: widget.onShowQR,
+                            icon: const Icon(Icons.qr_code),
+                            label: const Text('扫码连接'),
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 12),
                     Container(

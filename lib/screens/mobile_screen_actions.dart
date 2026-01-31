@@ -446,4 +446,24 @@ extension _MobileScreenStateActions on _MobileScreenState {
       SnackBar(content: Text(message), duration: const Duration(seconds: 2)),
     );
   }
+
+  /// 打开扫码页面
+  Future<void> _openQRScan() async {
+    final result = await Navigator.push<Device>(
+      context,
+      MaterialPageRoute(builder: (context) => const QRScanScreen()),
+    );
+
+    if (result != null && mounted) {
+      setState(() {
+        // 检查设备是否已在列表中
+        final exists = _devices.any((d) => d.ip == result.ip);
+        if (!exists) {
+          _devices.add(result);
+        }
+        _selectedDevice = result;
+      });
+      _showSnackBar('已连接到: ${result.name}');
+    }
+  }
 }

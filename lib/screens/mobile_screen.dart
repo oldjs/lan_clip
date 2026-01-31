@@ -37,6 +37,7 @@ import 'settings_screen.dart';
 import 'simple_input_screen.dart';
 import 'text_memory_screen.dart';
 import 'touchpad_screen.dart';
+import 'qr_scan_screen.dart';
 import '../widgets/remote_screen_overlay.dart';
 
 part 'mobile_screen_actions.dart';

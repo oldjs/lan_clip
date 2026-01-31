@@ -26,6 +26,7 @@ import 'package:cryptography/cryptography.dart';
 
 import 'settings_screen.dart';
 import 'file_transfer_screen.dart';
+import 'qr_display_screen.dart';
 import '../services/file_transfer_service.dart';
 import '../models/file_transfer.dart';
 import '../widgets/desktop/desktop_app_bar.dart';
@@ -661,6 +662,7 @@ class _DesktopScreenState extends State<DesktopScreen>
                     localIp: _localIp,
                     tcpPort: _tcpPort,
                     connectedDeviceCount: _connectedDevices.length,
+                    onShowQR: _showQRCode,
                   ),
                   const SizedBox(height: 20),
                   Expanded(
@@ -772,6 +774,19 @@ class _DesktopScreenState extends State<DesktopScreen>
               onTap: () => Navigator.pop(context, device),
             );
           },
+        ),
+      ),
+    );
+  }
+
+  /// 显示二维码供手机扫码连接
+  void _showQRCode() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => QRDisplayScreen(
+          port: _tcpPort,
+          deviceName: 'LAN Clip PC',
         ),
       ),
     );

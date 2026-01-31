@@ -92,6 +92,11 @@ extension _MobileScreenStateUi on _MobileScreenState {
             },
           ),
           IconButton(
+            icon: const Icon(Icons.qr_code_scanner),
+            tooltip: '扫码连接',
+            onPressed: _openQRScan,
+          ),
+          IconButton(
             icon: const Icon(Icons.settings),
             tooltip: '设置',
             onPressed: _openSettings,

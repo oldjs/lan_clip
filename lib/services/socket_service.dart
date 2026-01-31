@@ -256,6 +256,10 @@ class SocketService {
       final authMessage = 'AUTH:${passwordHash ?? ''}\n$payload';
       socket.write(authMessage);
       await socket.flush();
+      
+      // 关闭写入端，触发服务端的 onDone 开始处理请求
+      // close() 只关闭写入方向，仍可接收响应数据
+      socket.close();
 
       final responseCompleter = Completer<String>();
       final responseBuffer = StringBuffer();
@@ -283,7 +287,8 @@ class SocketService {
       final response = RemoteRequestCodec.tryDecodeResponse(responseText);
       await socket.close();
       return response;
-    } catch (_) {
+    } catch (e) {
+      print('[SocketService] sendRequest error: $e');
       return null;
     }
   }
@@ -354,5 +359,22 @@ class SocketService {
   void dispose() {
     _server?.close();
     _messageController.close();
+  }
+
+  /// 连接到设备并测试连接
+  /// 用于扫码闪电传功能
+  Future<bool> connectToDevice(Device device, {String? passwordHash}) async {
+    try {
+      // 发送测试请求
+      final result = await sendMessage(
+        device.ip,
+        device.port,
+        'PING',
+        passwordHash: passwordHash,
+      );
+      return result.success;
+    } catch (e) {
+      return false;
+    }
   }
 }
